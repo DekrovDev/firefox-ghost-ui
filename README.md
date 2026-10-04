@@ -31,6 +31,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 - Menus, extension popups, and active typing keep the toolbar available.
 - Moving away keeps all controls visible for **2 seconds**, then fades them together. Returning cancels closing. Submitting an address skips this wait and plays a short fade and collapse animation (about 0.3 seconds).
 - A native bookmarks menu button opens your saved sites. Sites from the old bookmarks bar are under **Bookmarks Toolbar** in that menu.
+- Downloads appear in a separate floating island with a native progress ring and completion animation. It retracts a few seconds after the last notification; hovering or opening its list keeps it available. Click the island to view files without revealing the address bar. Download warnings remain accessible.
 - Native window buttons stay accessible independently of the toolbar.
 - The sidebar expands on hover over the page, without shifting the page. While a side tool is open, tabs stay in a compact icon rail so its controls remain visible and stationary. Closing the tool restores normal hover expansion. Passive tab previews do not reveal the toolbar.
 - The hidden toolbar passes clicks through outside its visible center pill and 3-pixel top-edge activation strip. The window buttons have their own reserved area.
@@ -64,7 +65,7 @@ Firefox asks you to confirm extension installation. Ghost UI does not bundle ext
 
 To update, download a newer release, extract it, close Firefox, and run **Install.cmd**. Reinstalling preserves the original pre-install backup and does not duplicate configuration blocks.
 
-To remove Ghost UI, close Firefox and run **Uninstall.cmd**. It restores your original `userChrome.css`, `userContent.css`, `user.js`, and the previous values of the five Firefox preferences this installer manages. Other current preferences are retained. Backups remain inside the selected profile's `chrome/ghost-ui-backups/` folder.
+To remove Ghost UI, close Firefox and run **Uninstall.cmd**. It restores your original `userChrome.css`, `userContent.css`, `user.js`, and the previous values of the seven Firefox preferences this installer manages. Other current preferences are retained. Backups remain inside the selected profile's `chrome/ghost-ui-backups/` folder.
 
 If a managed file has been manually edited, update/uninstall stops before overwriting it. Save those edits or restore the managed file first; your original backups remain available for manual recovery.
 
@@ -81,12 +82,17 @@ If a managed file has been manually edited, update/uninstall stops before overwr
 | `sidebar.verticalTabs` | `true` |
 | `sidebar.visibility` | `expand-on-hover` |
 | `browser.tabs.inTitlebar` | `1` |
+| `browser.download.alwaysOpenPanel` | `false` |
+| `browser.download.panel.shown` | `true` |
 
 - If Bonjourr's extension UUID exists in this profile, adds `userContent.css` scoped to that exact extension URL. No other pages or extensions receive these styles.
 
 The installer adds the native bookmarks menu button if it is absent, preserving existing toolbar placements. Uninstall removes only this addition and keeps later toolbar changes. A preexisting button or a layout enforced through `user.js` is left as configured; you can add **Bookmarks Menu** manually through Customize Toolbar.
 
 The installer does not write bookmark/history databases, replace the rest of your preferences, install add-ons, or terminate Firefox processes. Competing custom browser styles may need adjustment. Microsoft Store profiles or nonstandard locations can be selected explicitly with `-ProfilePath`.
+
+
+The download island uses Firefox’s native **Downloads** button in the navigation toolbar. If you moved it into the overflow menu, move it back using **Customize Toolbar**. The installer disables automatic opening of the file list (including the first-download introduction); uninstall restores both previous download-panel settings.
 
 ## Advanced usage
 
@@ -103,7 +109,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.4
+./scripts/Build-Release.ps1 -Version 1.0.5
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.

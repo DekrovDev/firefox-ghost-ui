@@ -31,11 +31,13 @@ try {
     $r = Install-GhostUI $fresh $theme
     Assert (Test-Path -LiteralPath (Join-Path $fresh 'chrome\ghost-ui\state.json')) 'Fresh install state exists'
     Assert ((Read-TestFile (Join-Path $fresh 'user.js')) -match 'sidebar.verticalTabs.*, true') 'Native vertical tabs enabled'
+    Assert ((Read-TestFile (Join-Path $fresh 'user.js')) -match 'browser.download.alwaysOpenPanel.*, false') 'Downloads list opens on demand'
+    Assert ((Read-TestFile (Join-Path $fresh 'user.js')) -match 'browser.download.panel.shown.*, true') 'First download does not bypass on-demand panel setting'
     Assert (-not $r.BonjourrStyled) 'Missing Bonjourr does not block installation'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\userChrome.css')) -match '@import') 'CSS uses import wrapper'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '--ghost-open-wait: 120ms;') 'Release includes responsive hover delay'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '#urlbar\[usertyping\]\[focused\]') 'Search autohide fix included'
-    Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match ':not\(\[role="tooltip"\]\)') 'Passive previews excluded from toolbar hold'
+    Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match ':not\(\[role="tooltip"\], #downloadsPanel') 'Passive previews excluded from toolbar hold'
     # An older installation keeps its original backup while receiving the new
     # theme and current version metadata.
     $statePath = Join-Path $fresh 'chrome\ghost-ui\state.json'
@@ -56,6 +58,7 @@ try {
     Assert (-not (Test-Path -LiteralPath (Join-Path $fresh 'chrome\userChrome.css'))) 'New CSS wrapper removed on uninstall'
     $restored = Read-TestFile (Join-Path $fresh 'prefs.js')
     Assert ($restored -notmatch 'user_pref\("sidebar.verticalTabs"') 'Originally absent preference removed'
+    Assert ($restored -notmatch 'browser.download.alwaysOpenPanel|browser.download.panel.shown') 'Originally absent download settings removed'
     Assert ($restored -match 'later.preference.*42') 'Later unrelated preference preserved'
     Assert ($restored -match 'unrelated.preference.*keep me') 'Original unrelated preference preserved'
     Assert (Test-Path -LiteralPath $r.Backup) 'Backups retained after uninstall'
@@ -100,15 +103,42 @@ try {
     $legacyState = Read-TestFile $legacyStatePath | ConvertFrom-Json
     $legacyState.version = '1.0.1'
     $legacyState.PSObject.Properties.Remove('bookmarkButton')
+    $legacyState.preferences = @($legacyState.preferences | Where-Object { $_.name -notlike 'browser.download.*' })
     Write-TestFile $legacyStatePath ($legacyState | ConvertTo-Json -Depth 12)
-    Write-TestFile (Join-Path $legacy 'prefs.js') 'user_pref("before.update", 1);'
+    Write-TestFile (Join-Path $legacy 'prefs.js') ('user_pref("before.update", 1);' + "`n" + 'user_pref("browser.download.alwaysOpenPanel", true);' + "`n" + 'user_pref("browser.download.panel.shown", false);')
     $legacyBackup = $legacyState.backupName
     Install-GhostUI $legacy $theme | Out-Null
     $legacyUpdated = Read-TestFile $legacyStatePath | ConvertFrom-Json
     Assert ($legacyUpdated.bookmarkButton.added -and $legacyUpdated.backupName -eq $legacyBackup) '1.0.1 migration adds menu while retaining first backup'
+    Assert (@($legacyUpdated.preferences).Count -eq 7) 'Legacy update captures new download preference originals'
     Uninstall-GhostUI $legacy | Out-Null
     $legacyPrefs = Read-TestFile (Join-Path $legacy 'prefs.js')
     Assert ($legacyPrefs.Contains('user_pref("before.update", 1);') -and $legacyPrefs -notmatch 'uiCustomization') 'Legacy migration rolls back layout without losing preferences'
+
+    Assert ($legacyPrefs -match 'browser.download.alwaysOpenPanel.*, true' -and $legacyPrefs -match 'browser.download.panel.shown.*, false') 'Uninstall restores download settings captured at upgrade time'
+
+    $oldUninstall = New-TestProfile 'uninstall old download settings'
+    Install-GhostUI $oldUninstall $theme | Out-Null
+    $oldPath = Join-Path $oldUninstall 'chrome/ghost-ui/state.json'
+    $oldRecord = Read-TestFile $oldPath | ConvertFrom-Json
+    $oldRecord.version = '1.0.4'
+    $oldRecord.preferences = @($oldRecord.preferences | Where-Object { $_.name -notlike 'browser.download.*' })
+    Write-TestFile $oldPath ($oldRecord | ConvertTo-Json -Depth 12)
+    $downloadPrefs = 'user_pref("browser.download.alwaysOpenPanel", true);' + "`n" + 'user_pref("browser.download.panel.shown", false);'
+    Write-TestFile (Join-Path $oldUninstall 'prefs.js') $downloadPrefs
+    Uninstall-GhostUI $oldUninstall | Out-Null
+    Assert ((Read-TestFile (Join-Path $oldUninstall 'prefs.js')).Contains($downloadPrefs)) 'Direct uninstall of an older release leaves unmanaged download preferences untouched'
+
+    $missingDownload = New-TestProfile 'missing download preference backup'
+    Install-GhostUI $missingDownload $theme | Out-Null
+    $missingPath = Join-Path $missingDownload 'chrome/ghost-ui/state.json'
+    $missingRecord = Read-TestFile $missingPath | ConvertFrom-Json
+    $missingRecord.preferences = @($missingRecord.preferences | Where-Object { $_.name -ne 'browser.download.alwaysOpenPanel' })
+    Write-TestFile $missingPath ($missingRecord | ConvertTo-Json -Depth 12)
+    $missingBefore = Read-TestFile (Join-Path $missingDownload 'user.js')
+    Expect-Failure { Install-GhostUI $missingDownload $theme } 'New release cannot silently recreate a lost preference original'
+    Expect-Failure { Uninstall-GhostUI $missingDownload } 'New release requires complete download preference backup before uninstall'
+    Assert ((Read-TestFile (Join-Path $missingDownload 'user.js')) -ceq $missingBefore) 'Incomplete state refusal preserves installed settings'
 
     $brokenLayout = New-TestProfile 'malformed toolbar'
     $brokenPrefs = 'user_pref("browser.uiCustomization.state", "invalid json");'

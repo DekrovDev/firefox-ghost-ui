@@ -24,6 +24,8 @@
   --ghost-rail-width: 50px;
   --ghost-radius: 15px;
   --ghost-icon-stagger: 18ms;
+  --ghost-download-linger: 2500ms;
+  --ghost-download-exit-time: 420ms;
   --ghost-ease: cubic-bezier(.16, 1, .30, 1);
   --ghost-icon-ease: cubic-bezier(.34, 1.3, .64, 1);
   --ghost-surface: color-mix(in srgb, var(--toolbar-background-color, var(--toolbar-bgcolor, #17171b)) 87%, transparent);
@@ -93,25 +95,25 @@
 /* Replace the queued hover transition with a short submission animation.
    Firefox computes transition delays before inherited property animations. */
 @container ghost-navigation style(--ghost-edit-session: 1) {
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #nav-bar::before,
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused])))
-  :is(#nav-bar, #urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
+  :is(#nav-bar, #urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container, #downloads-button), #PanelUI-button, #nav-bar-overflow-button) {
     transition: none !important;
   }
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #nav-bar::before {
     animation: ghost-submit-shell var(--ghost-submit-shell-time) ease-in-out both !important;
   }
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #urlbar {
     opacity: var(--ghost-submit-opacity) !important;
     animation: ghost-submit-fade var(--ghost-submit-fade-time) ease-out both !important;
   }
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused])))
-  :is(#nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
+  :is(#nav-bar-customization-target > :not(#urlbar-container, #downloads-button), #PanelUI-button, #nav-bar-overflow-button) {
     opacity: var(--ghost-submit-opacity) !important;
     visibility: var(--ghost-submit-visibility, hidden) !important;
     animation: ghost-submit-icons var(--ghost-submit-fade-time) ease-out both !important;
@@ -156,7 +158,7 @@
 
 /* Hover opens after the wait. Window buttons do not trigger the toolbar. */
 :root[windowtype="navigator:browser"]
-#navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover)) {
+#navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover, #downloads-button:hover)) {
   --ghost-edit-session: 0;
   transition-delay: 0ms;
   --ghost-shell-width: 100%;
@@ -192,7 +194,7 @@
   :has(#urlbar[breakout-extend][focused])
 ),
 /* Passive tab/sidebar previews must not reveal the navigation toolbar. */
-:root[windowtype="navigator:browser"]:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])) #navigator-toolbox {
+:root[windowtype="navigator:browser"]:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))) #navigator-toolbox {
   --ghost-shell-width: 100% !important;
   --ghost-shell-height: var(--ghost-bar-height) !important;
   --ghost-shell-radius: var(--ghost-radius) !important;
@@ -222,7 +224,7 @@
   position: fixed !important;
   top: var(--ghost-bar-top) !important;
   left: calc(var(--ghost-rail-width) + 14px) !important;
-  right: 154px !important;
+  right: 218px !important;
   width: auto !important;
   max-width: 1500px !important;
   min-width: 0 !important;
@@ -286,7 +288,7 @@
 }
 
 :root[windowtype="navigator:browser"]
-#navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover)) #nav-bar::after {
+#navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover, #downloads-button:hover)) #nav-bar::after {
   animation: ghost-charge var(--ghost-open-wait) linear both;
 }
 
@@ -320,7 +322,7 @@
 }
 
 :root[windowtype="navigator:browser"]
-:is(#nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
+:is(#nav-bar-customization-target > :not(#urlbar-container, #downloads-button), #PanelUI-button, #nav-bar-overflow-button) {
   --ghost-wave: 3;
   --ghost-fold-x: -8px;
   --ghost-content-delay: max(0ms, calc(var(--ghost-content-base-delay) + min(var(--ghost-wave), 5) * var(--ghost-wave-step)));
@@ -369,6 +371,115 @@
 }
 :root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) { scale: 1.075; }
 :root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:active > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) { scale: .93; }
+
+/* A separate native download island. The button retains Firefox's progress,
+   completion animation, tooltip, keyboard command and download safety badges.
+   Its popup never expands the address bar, and hidden space passes clicks. */
+:root:not([customizing]) #nav-bar-customization-target > #downloads-button {
+  position: fixed !important;
+  top: var(--ghost-bar-top) !important;
+  right: 158px !important;
+  width: 52px !important;
+  height: var(--ghost-bar-height) !important;
+  min-width: 52px !important;
+  min-height: var(--ghost-bar-height) !important;
+  max-height: var(--ghost-bar-height) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid var(--ghost-border) !important;
+  border-radius: 16px !important;
+  background: var(--ghost-surface) !important;
+  backdrop-filter: blur(22px) saturate(1.15);
+  box-shadow: 0 8px 26px rgb(0 0 0 / .22) !important;
+  opacity: var(--ghost-content-opacity) !important;
+  visibility: var(--ghost-content-visibility) !important;
+  pointer-events: var(--ghost-content-pointer) !important;
+  translate: 0 calc(-64px * (1 - var(--ghost-content-opacity))) !important;
+  scale: 1 !important;
+  transition:
+    opacity 240ms ease var(--ghost-download-linger),
+    translate var(--ghost-download-exit-time) var(--ghost-ease) var(--ghost-download-linger),
+    visibility 1ms step-end calc(var(--ghost-download-linger) + var(--ghost-download-exit-time)) allow-discrete,
+    pointer-events 1ms step-end calc(var(--ghost-download-linger) + var(--ghost-download-exit-time)) allow-discrete !important;
+}
+:root:not([customizing]) #nav-bar-customization-target > #downloads-button:is(
+  [progress], [notification], [open="true"], [attention="info"],
+  [attention="warning"], [attention="severe"], :hover, :focus-visible
+) {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  translate: 0 0 !important;
+  transition-delay: 0ms !important;
+}
+:root:not([customizing]) #nav-bar-customization-target > #downloads-button > .toolbarbutton-badge-stack {
+  border-radius: 12px !important;
+  background-color: transparent !important;
+}
+:root:not([customizing]) #nav-bar-customization-target > #downloads-button:hover > .toolbarbutton-badge-stack {
+  background-color: color-mix(in srgb, currentColor 10%, transparent) !important;
+}
+:root:not([customizing]) #downloads-button::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 8px;
+  background: linear-gradient(transparent, var(--ghost-border));
+  pointer-events: none;
+}
+/* The arrow stays in the middle of a larger native progress ring. */
+:root:not([customizing]) #downloads-button[progress]:not([notification]) #downloads-indicator-icon {
+  visibility: visible !important;
+}
+:root:not([customizing]) #downloads-button[progress] #downloads-indicator-progress-outer {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 50%;
+  background: none !important;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+}
+:root:not([customizing]) #downloads-button[progress] #downloads-indicator-progress-inner {
+  width: 30px !important;
+  height: 30px !important;
+  mask-image: radial-gradient(circle, transparent 57%, black 60%);
+}
+@container ghost-navigation style(--ghost-content-opacity: 1) {
+  :root:not([customizing]) #nav-bar-customization-target > #downloads-button {
+    transition-delay: 0ms !important;
+  }
+}
+@property --ghost-download-exit-y {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@container ghost-navigation style(--ghost-edit-session: 1) {
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
+  #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused])))
+  #downloads-button:not(:is([progress], [notification], [open="true"], [attention="info"], [attention="warning"], [attention="severe"])) {
+    transition: none !important;
+    opacity: var(--ghost-submit-opacity) !important;
+    visibility: var(--ghost-submit-visibility, hidden) !important;
+    pointer-events: none !important;
+    translate: 0 var(--ghost-download-exit-y) !important;
+    animation: ghost-download-submit var(--ghost-submit-shell-time) ease-in-out both !important;
+  }
+}
+@keyframes ghost-download-submit {
+  from { --ghost-submit-opacity: 1; --ghost-submit-visibility: visible; --ghost-download-exit-y: 0px; }
+  99.9% { --ghost-submit-visibility: visible; }
+  to { --ghost-submit-opacity: 0; --ghost-submit-visibility: hidden; --ghost-download-exit-y: -64px; }
+}
+/* Keep the native popup real and interactive. Dismissing it runs Firefox's
+   normal cleanup; no invisible, still-open download panel is left behind. */
+:root #downloadsPanel {
+  --panel-border-radius: 18px;
+  --panel-background: var(--ghost-solid);
+  --panel-border-color: var(--ghost-border);
+}
+:root #downloadsPanel .downloadMainArea { padding-block: 10px !important; }
 
 /* Native window commands stay available independently of the floating bar. */
 :root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar[autohide][inactive] {
@@ -481,7 +592,8 @@
   :root { --ghost-open-time: 1ms; --ghost-close-time: 1ms; --ghost-submit-shell-time: 1ms; --ghost-submit-fade-time: 1ms; --ghost-icon-stagger: 0ms; }
   :root #navigator-toolbox { --ghost-shell-time: 1ms !important; --ghost-content-time: 1ms !important; }
   :root #nav-bar::after { animation: none !important; }
-  :root :is(#urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
+  :root:not([customizing]) #nav-bar-customization-target > #downloads-button { transition-duration: 1ms !important; }
+  :root :is(#urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container, #downloads-button), #PanelUI-button, #nav-bar-overflow-button) {
     transition-duration: 1ms !important;
   }
 }

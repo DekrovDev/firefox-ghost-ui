@@ -1,12 +1,14 @@
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
-$script:Version = '1.0.4'
+$script:Version = '1.0.5'
 $script:PreferenceValues = [ordered]@{
     'toolkit.legacyUserProfileCustomizations.stylesheets' = $true
     'sidebar.revamp' = $true
     'sidebar.verticalTabs' = $true
     'sidebar.visibility' = 'expand-on-hover'
     'browser.tabs.inTitlebar' = 1
+    'browser.download.alwaysOpenPanel' = $false
+    'browser.download.panel.shown' = $true
 }
 $script:TrackedFiles = @('user.js', 'chrome/userChrome.css', 'chrome/userContent.css',
     'chrome/userChrome.ghost-ui-original.css', 'chrome/userContent.ghost-ui-original.css',
@@ -207,7 +209,10 @@ function Get-GhostState([string]$Profile) {
     $state = Read-GhostText $statePath | ConvertFrom-Json
     if ($state.schema -ne 1 -or $state.backupName -notmatch '^\d{8}-\d{6}-[0-9a-f]{8}$') { throw 'Invalid Ghost UI installation state.' }
     foreach ($name in $script:PreferenceValues.Keys) {
-        if (@($state.preferences | Where-Object { $_.name -eq $name }).Count -ne 1) { throw 'Incomplete preference backup.' }
+        $entries = @($state.preferences | Where-Object { $_.name -eq $name })
+        # Releases through 1.0.4 did not manage download-panel preferences.
+        $legacyDownload = $state.version -match '^1\.0\.[0-4]$' -and $name -in @('browser.download.alwaysOpenPanel', 'browser.download.panel.shown')
+        if ($entries.Count -ne 1 -and -not ($legacyDownload -and $entries.Count -eq 0)) { throw 'Incomplete preference backup.' }
     }
     return $state
 }
@@ -257,6 +262,13 @@ function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
                 if (Test-GhostFile $original) {
                     Copy-GhostFile $original (Join-Path $profile "chrome/$kind.ghost-ui-original.css") $false
                 }
+            }
+        }
+        # Capture newly managed preferences at upgrade time, preserving the
+        # first CSS backup and all previously recorded preference originals.
+        foreach ($name in $script:PreferenceValues.Keys) {
+            if (@($state.preferences | Where-Object { $_.name -eq $name }).Count -eq 0) {
+                $state.preferences = @($state.preferences) + @(Get-GhostPreference (Read-GhostText (Join-Path $profile 'prefs.js')) $name)
             }
         }
         if (-not $state.PSObject.Properties['bookmarkButton']) {
@@ -324,7 +336,9 @@ function Uninstall-GhostUI([string]$ProfilePath) {
         $prefs = Read-GhostText (Join-Path $profile 'prefs.js')
         if ($state.PSObject.Properties['bookmarkButton']) { $prefs = Remove-GhostBookmarksButton $prefs $state.bookmarkButton }
         foreach ($name in $script:PreferenceValues.Keys) {
-            $entry = @($state.preferences | Where-Object { $_.name -eq $name })[0]
+            $entries = @($state.preferences | Where-Object { $_.name -eq $name })
+            if ($entries.Count -eq 0) { continue } # Uninstall an older release without touching its download settings.
+            $entry = $entries[0]
             $pattern = '(?m)^\s*user_pref\("' + [regex]::Escape($name) + '",\s*.+\);[^\S\r\n]*\r?\n?'
             $prefs = [regex]::Replace($prefs, $pattern, '')
             if ($entry.exists) { $prefs += "`r`n" + 'user_pref(' + ($name | ConvertTo-Json -Compress) + ', ' + ($entry.value | ConvertTo-Json -Compress) + ");`r`n" }
