@@ -116,6 +116,16 @@ try {
     Expect-Failure { Install-GhostUI $brokenLayout $theme } 'Malformed toolbar layout cannot overwrite preferences'
     Assert ((Read-TestFile (Join-Path $brokenLayout 'prefs.js')) -ceq $brokenPrefs -and -not (Test-Path (Join-Path $brokenLayout 'user.js'))) 'Failed install rolls back profile files and preferences'
 
+    $longName = ('nested-profile-' * 10)
+    $longProfile = New-TestProfile $longName
+    $longCSS = '/* original style in a profile with a long backup path */'
+    Write-TestFile (Join-Path $longProfile 'chrome/userChrome.css') $longCSS
+    $longInstalled = Install-GhostUI $longProfile $theme
+    Assert ((Join-Path $longInstalled.Backup 'chrome/userChrome.css').Length -gt 260) 'Regression fixture exercises a backup path longer than 260 characters'
+    Install-GhostUI $longProfile $theme | Out-Null
+    Uninstall-GhostUI $longProfile | Out-Null
+    Assert ((Read-TestFile (Join-Path $longProfile 'chrome/userChrome.css')) -ceq $longCSS) 'Long-path install, update and uninstall preserve original CSS'
+
     $existing = New-TestProfile 'existing'
     $chrome = "/* personal CSS */`r`n@import url(`"extras.css`");`r`n:root { --personal: 1; }`r`n"
     $content = 'body { font-family: sans-serif; }'
@@ -194,6 +204,6 @@ try {
     $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
     if ($resolved.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -and
         [IO.Path]::GetFileName($resolved) -match '^ghost-ui-tests-[0-9a-f]{32}$') {
-        Remove-Item -LiteralPath $resolved -Recurse -Force
+        [IO.Directory]::Delete(('\\?\' + $resolved), $true)
     } else { throw 'Unsafe test cleanup target refused.' }
 }
