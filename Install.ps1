@@ -17,7 +17,7 @@ try {
         Write-Host 'Optional: install Bonjourr in Firefox, close Firefox, then run Install.cmd again to add its animations.'
         Write-Host 'https://addons.mozilla.org/firefox/addon/bonjourr-startpage/'
     }
-    Write-Host 'Use Uninstall.cmd to restore your original CSS and the five changed Firefox preferences.'
+    Write-Host 'Use Uninstall.cmd to restore your original CSS, five appearance preferences, and the bookmarks button addition.'
     exit 0
 } catch {
     Write-Host ("Installation stopped: " + $_.Exception.Message) -ForegroundColor Red

@@ -33,7 +33,7 @@ try {
     Assert ((Read-TestFile (Join-Path $fresh 'user.js')) -match 'sidebar.verticalTabs.*, true') 'Native vertical tabs enabled'
     Assert (-not $r.BonjourrStyled) 'Missing Bonjourr does not block installation'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\userChrome.css')) -match '@import') 'CSS uses import wrapper'
-    Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '--ghost-open-wait: 725ms;') 'Release keeps 725ms delay'
+    Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '--ghost-open-wait: 120ms;') 'Release includes responsive hover delay'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '#urlbar\[usertyping\]\[focused\]') 'Search autohide fix included'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match ':not\(\[role="tooltip"\]\)') 'Passive previews excluded from toolbar hold'
     # An older installation keeps its original backup while receiving the new
@@ -59,6 +59,62 @@ try {
     Assert ($restored -match 'later.preference.*42') 'Later unrelated preference preserved'
     Assert ($restored -match 'unrelated.preference.*keep me') 'Original unrelated preference preserved'
     Assert (Test-Path -LiteralPath $r.Backup) 'Backups retained after uninstall'
+
+    $layoutProfile = New-TestProfile 'custom toolbar'
+    $layout = '{"placements":{"nav-bar":["back-button","urlbar-container","downloads-button","my-extension"],"widget-overflow-fixed-list":["personal-button"]},"currentVersion":26,"customField":"keep"}'
+    $layoutPref = 'user_pref("browser.uiCustomization.state", ' + ($layout | ConvertTo-Json -Compress) + ');'
+    Write-TestFile (Join-Path $layoutProfile 'prefs.js') $layoutPref
+    Install-GhostUI $layoutProfile $theme | Out-Null
+    $buttonState = Read-TestFile (Join-Path $layoutProfile 'chrome/ghost-ui/state.json') | ConvertFrom-Json
+    Assert $buttonState.bookmarkButton.added 'Bookmarks button added without replacing custom toolbar'
+    $placed = $buttonState.bookmarkButton.applied | ConvertFrom-Json
+    Assert (($placed.placements.'nav-bar' -join ',') -eq 'back-button,urlbar-container,bookmarks-menu-button,downloads-button,my-extension') 'Button inserted beside address field; existing order preserved'
+    Assert ($placed.customField -eq 'keep' -and $placed.placements.'widget-overflow-fixed-list'[0] -eq 'personal-button') 'Other layout fields and areas preserved'
+    # Simulate rearrangements after installation and ensure uninstall is surgical.
+    $placed.placements.'nav-bar' = @('new-user-button') + $placed.placements.'nav-bar'
+    $placed.customField = 'later edit'
+    Write-TestFile (Join-Path $layoutProfile 'prefs.js') ('user_pref("browser.uiCustomization.state", ' + (($placed | ConvertTo-Json -Compress -Depth 10) | ConvertTo-Json -Compress) + ');')
+    Install-GhostUI $layoutProfile $theme | Out-Null
+    $updated = Read-TestFile (Join-Path $layoutProfile 'prefs.js')
+    Assert (([regex]::Matches($updated,'bookmarks-menu-button')).Count -eq 1) 'Update does not duplicate bookmarks button'
+    Uninstall-GhostUI $layoutProfile | Out-Null
+    $removed = Read-TestFile (Join-Path $layoutProfile 'prefs.js')
+    Assert ($removed -notmatch 'bookmarks-menu-button' -and $removed -match 'new-user-button' -and $removed -match 'later edit') 'Uninstall preserves later toolbar changes'
+    foreach ($originalLayout in @($layout.Replace('downloads-button','bookmarks-menu-button'), $layout)) {
+        $case = New-TestProfile ([Guid]::NewGuid().ToString('N'))
+        $before = 'user_pref("browser.uiCustomization.state", ' + ($originalLayout | ConvertTo-Json -Compress) + ');'
+        Write-TestFile (Join-Path $case 'prefs.js') $before
+        Install-GhostUI $case $theme | Out-Null
+        Uninstall-GhostUI $case | Out-Null
+        Assert ((Read-TestFile (Join-Path $case 'prefs.js')).Contains($before)) 'Unchanged layout and preexisting bookmarks button restored exactly'
+    }
+    $pinnedLayout = New-TestProfile 'user.js layout'
+    Write-TestFile (Join-Path $pinnedLayout 'user.js') $layoutPref
+    Install-GhostUI $pinnedLayout $theme | Out-Null
+    Assert ((Read-TestFile (Join-Path $pinnedLayout 'prefs.js')) -notmatch 'uiCustomization') 'Persistent user.js layout override respected'
+    Uninstall-GhostUI $pinnedLayout | Out-Null
+
+    $legacy = New-TestProfile 'update from 1.0.1'
+    Install-GhostUI $legacy $theme | Out-Null
+    $legacyStatePath = Join-Path $legacy 'chrome/ghost-ui/state.json'
+    $legacyState = Read-TestFile $legacyStatePath | ConvertFrom-Json
+    $legacyState.version = '1.0.1'
+    $legacyState.PSObject.Properties.Remove('bookmarkButton')
+    Write-TestFile $legacyStatePath ($legacyState | ConvertTo-Json -Depth 12)
+    Write-TestFile (Join-Path $legacy 'prefs.js') 'user_pref("before.update", 1);'
+    $legacyBackup = $legacyState.backupName
+    Install-GhostUI $legacy $theme | Out-Null
+    $legacyUpdated = Read-TestFile $legacyStatePath | ConvertFrom-Json
+    Assert ($legacyUpdated.bookmarkButton.added -and $legacyUpdated.backupName -eq $legacyBackup) '1.0.1 migration adds menu while retaining first backup'
+    Uninstall-GhostUI $legacy | Out-Null
+    $legacyPrefs = Read-TestFile (Join-Path $legacy 'prefs.js')
+    Assert ($legacyPrefs.Contains('user_pref("before.update", 1);') -and $legacyPrefs -notmatch 'uiCustomization') 'Legacy migration rolls back layout without losing preferences'
+
+    $brokenLayout = New-TestProfile 'malformed toolbar'
+    $brokenPrefs = 'user_pref("browser.uiCustomization.state", "invalid json");'
+    Write-TestFile (Join-Path $brokenLayout 'prefs.js') $brokenPrefs
+    Expect-Failure { Install-GhostUI $brokenLayout $theme } 'Malformed toolbar layout cannot overwrite preferences'
+    Assert ((Read-TestFile (Join-Path $brokenLayout 'prefs.js')) -ceq $brokenPrefs -and -not (Test-Path (Join-Path $brokenLayout 'user.js'))) 'Failed install rolls back profile files and preferences'
 
     $existing = New-TestProfile 'existing'
     $chrome = "/* personal CSS */`r`n@import url(`"extras.css`");`r`n:root { --personal: 1; }`r`n"

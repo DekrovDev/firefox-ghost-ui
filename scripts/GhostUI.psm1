@@ -1,6 +1,6 @@
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
-$script:Version = '1.0.1'
+$script:Version = '1.0.2'
 $script:PreferenceValues = [ordered]@{
     'toolkit.legacyUserProfileCustomizations.stylesheets' = $true
     'sidebar.revamp' = $true
@@ -39,6 +39,63 @@ function Get-GhostPreference([string]$Text, [string]$Name) {
         return [pscustomobject]@{ name = $Name; exists = $true; value = ($found[$found.Count-1].Groups[1].Value | ConvertFrom-Json) }
     }
     return [pscustomobject]@{ name = $Name; exists = $false; value = $null }
+}
+
+function Set-GhostPreference([string]$Text, [string]$Name, [bool]$Exists, $Value) {
+    $pattern = '(?m)^\s*user_pref\("' + [regex]::Escape($Name) + '",\s*.+\);[^\S\r\n]*\r?\n?'
+    $result = [regex]::Replace($Text, $pattern, '')
+    if ($Exists) { $result += "`r`n" + 'user_pref(' + ($Name | ConvertTo-Json -Compress) + ', ' + ($Value | ConvertTo-Json -Compress -Depth 20) + ");`r`n" }
+    return $result
+}
+
+function Add-GhostBookmarksButton([string]$Profile, $State) {
+    # A user.js layout is an intentional persistent override; do not compete.
+    $pinned = Get-GhostPreference (Read-GhostText (Join-Path $Profile 'user.js')) 'browser.uiCustomization.state'
+    $prefsPath = Join-Path $Profile 'prefs.js'
+    $text = Read-GhostText $prefsPath
+    $original = Get-GhostPreference $text 'browser.uiCustomization.state'
+    $record = [pscustomobject]@{ added = $false; original = $original; applied = $null }
+    if ($pinned.exists) { return $record }
+    if ($original.exists) {
+        $layout = $original.value | ConvertFrom-Json
+        if (-not $layout.PSObject.Properties['placements']) { throw 'Firefox toolbar layout is incomplete. No layout was replaced.' }
+    } else {
+        # Firefox 156's core navbar; missing areas retain Firefox's defaults.
+        $layout = [pscustomobject]@{ currentVersion = 26; placements = [pscustomobject]@{
+            'nav-bar' = @('sidebar-button','back-button','forward-button','stop-reload-button','spring','vertical-spacer','urlbar-container','spring','downloads-button','ipprotection-button','fxa-toolbar-menu-button','reset-pbm-toolbar-button','unified-extensions-button')
+        } }
+    }
+    foreach ($area in $layout.placements.PSObject.Properties) {
+        if (@($area.Value) -contains 'bookmarks-menu-button') { return $record }
+    }
+    if (-not $layout.placements.PSObject.Properties['nav-bar']) { throw 'Firefox navigation toolbar layout is missing.' }
+    $nav = [Collections.Generic.List[string]]::new()
+    foreach ($widget in $layout.placements.'nav-bar') { $nav.Add([string]$widget) }
+    $index = $nav.IndexOf('downloads-button')
+    if ($index -lt 0) { $index = $nav.IndexOf('urlbar-container') + 1 }
+    $nav.Insert([Math]::Max(0,$index), 'bookmarks-menu-button')
+    $layout.placements.'nav-bar' = $nav.ToArray()
+    $record.added = $true
+    $record.applied = $layout | ConvertTo-Json -Compress -Depth 20
+    Write-GhostText $prefsPath (Set-GhostPreference $text 'browser.uiCustomization.state' $true $record.applied)
+    return $record
+}
+
+function Remove-GhostBookmarksButton([string]$Text, $Record) {
+    if (-not $Record.added) { return $Text }
+    $current = Get-GhostPreference $Text 'browser.uiCustomization.state'
+    if (-not $current.exists) { return $Text }
+    if ($current.value -ceq $Record.applied) {
+        return Set-GhostPreference $Text 'browser.uiCustomization.state' $Record.original.exists $Record.original.value
+    }
+    # Firefox or the user may have rearranged other widgets after installation.
+    # Remove our one addition, keeping every other current placement and field.
+    $layout = $current.value | ConvertFrom-Json
+    if (-not $layout.PSObject.Properties['placements']) { throw 'Firefox toolbar layout is incomplete. No layout was replaced.' }
+    foreach ($area in $layout.placements.PSObject.Properties) {
+        $area.Value = @($area.Value | Where-Object { $_ -ne 'bookmarks-menu-button' })
+    }
+    return Set-GhostPreference $Text 'browser.uiCustomization.state' $true ($layout | ConvertTo-Json -Compress -Depth 20)
 }
 
 function Get-GhostProfiles([string]$FirefoxRoot = (Join-Path $env:APPDATA 'Mozilla\Firefox')) {
@@ -169,7 +226,7 @@ function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
     $backupRoot = Join-Path $profile 'chrome\ghost-ui-backups'
     $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8)
     $transaction = Join-Path $backupRoot ("transaction-" + $stamp)
-    $rollback = @(New-GhostSnapshot $profile $transaction $script:TrackedFiles)
+    $rollback = @(New-GhostSnapshot $profile $transaction ($script:TrackedFiles + @('prefs.js')))
     try {
         if (-not $state) {
             $backup = Join-Path $backupRoot $stamp
@@ -183,6 +240,9 @@ function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
                     Copy-Item -LiteralPath $original -Destination (Join-Path $profile "chrome/$kind.ghost-ui-original.css")
                 }
             }
+        }
+        if (-not $state.PSObject.Properties['bookmarkButton']) {
+            $state | Add-Member -NotePropertyName bookmarkButton -NotePropertyValue (Add-GhostBookmarksButton $profile $state)
         }
         $backup = Join-Path $backupRoot $state.backupName
         $payload = Join-Path $profile 'chrome\ghost-ui'
@@ -244,6 +304,7 @@ function Uninstall-GhostUI([string]$ProfilePath) {
     try {
         Restore-GhostSnapshot $profile $backup $state.originals
         $prefs = Read-GhostText (Join-Path $profile 'prefs.js')
+        if ($state.PSObject.Properties['bookmarkButton']) { $prefs = Remove-GhostBookmarksButton $prefs $state.bookmarkButton }
         foreach ($name in $script:PreferenceValues.Keys) {
             $entry = @($state.preferences | Where-Object { $_.name -eq $name })[0]
             $pattern = '(?m)^\s*user_pref\("' + [regex]::Escape($name) + '",\s*.+\);[^\S\r\n]*\r?\n?'

@@ -25,13 +25,15 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 
 ## Features
 
-- Hover at the top center: a small island appears, then opens after **725 ms**.
+- Hover anywhere along the usable top edge, or over the visible center pill. Opening starts after **120 ms** and the controls appear within about half a second.
 - **Ctrl+L** opens the address bar immediately.
 - After you submit a search, the toolbar collapses when editing ends and suggestions close. A saved query no longer keeps it open.
 - Menus, extension popups, and active typing keep the toolbar available.
+- Moving away keeps all controls visible for **2 seconds**, then fades them together. Returning cancels closing. Submitting an address skips this wait.
+- A native bookmarks menu button opens your saved sites. Sites from the old bookmarks bar are under **Bookmarks Toolbar** in that menu.
 - Native window buttons stay accessible independently of the toolbar.
 - The sidebar expands on hover over the page, without shifting the page. While a side tool is open, tabs stay in a compact icon rail so its controls remain visible and stationary. Closing the tool restores normal hover expansion. Passive tab previews do not reveal the toolbar.
-- The hidden toolbar passes clicks through, except for its 3-pixel activation strip at the top center.
+- The hidden toolbar passes clicks through outside its visible center pill and 3-pixel top-edge activation strip. The window buttons have their own reserved area.
 - F11 and fullscreen video hide the floating controls and sidebar.
 - Supports reduced motion and Adaptive Tab Bar Colour theme colors.
 - Optional Bonjourr animations preserve its wallpaper, search, links, and settings.
@@ -82,6 +84,8 @@ If a managed file has been manually edited, update/uninstall stops before overwr
 
 - If Bonjourr's extension UUID exists in this profile, adds `userContent.css` scoped to that exact extension URL. No other pages or extensions receive these styles.
 
+The installer adds the native bookmarks menu button if it is absent, preserving existing toolbar placements. Uninstall removes only this addition and keeps later toolbar changes. A preexisting button or a layout enforced through `user.js` is left as configured; you can add **Bookmarks Menu** manually through Customize Toolbar.
+
 The installer does not write bookmark/history databases, replace the rest of your preferences, install add-ons, or terminate Firefox processes. Competing custom browser styles may need adjustment. Microsoft Store profiles or nonstandard locations can be selected explicitly with `-ProfilePath`.
 
 ## Advanced usage
@@ -99,7 +103,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.1
+./scripts/Build-Release.ps1 -Version 1.0.2
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.

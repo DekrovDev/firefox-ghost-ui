@@ -2,20 +2,26 @@
    The toolbar keeps its native layout; only its glass shell changes size.
    Back up existing chrome/userChrome.css, replace it, then restart Firefox. */
 
+/* Remember deliberate editing briefly so Enter skips the hover close grace. */
+@property --ghost-edit-session {
+  syntax: "<integer>";
+  inherits: true;
+  initial-value: 0;
+}
+
 :root {
   --ghost-trigger-height: 3px;
-  --ghost-trigger-width: 240px;
-  --ghost-island-width: 168px;
-  --ghost-island-height: 7px;
-  --ghost-open-wait: 725ms;
-  --ghost-open-time: 760ms;
-  --ghost-close-wait: 450ms;
-  --ghost-close-time: 560ms;
+  --ghost-island-width: 128px;
+  --ghost-island-height: 12px;
+  --ghost-open-wait: 120ms;
+  --ghost-open-time: 360ms;
+  --ghost-close-wait: 2000ms;
+  --ghost-close-time: 280ms;
   --ghost-bar-height: 46px;
   --ghost-bar-top: 8px;
   --ghost-rail-width: 50px;
   --ghost-radius: 15px;
-  --ghost-icon-stagger: 48ms;
+  --ghost-icon-stagger: 18ms;
   --ghost-ease: cubic-bezier(.16, 1, .30, 1);
   --ghost-icon-ease: cubic-bezier(.34, 1.3, .64, 1);
   --ghost-surface: color-mix(in srgb, var(--toolbar-background-color, var(--toolbar-bgcolor, #17171b)) 87%, transparent);
@@ -44,31 +50,59 @@
   --ghost-shell-width: var(--ghost-island-width);
   --ghost-shell-height: var(--ghost-island-height);
   --ghost-shell-radius: 999px;
-  --ghost-shell-opacity: 0;
-  --ghost-shell-pointer: none;
+  --ghost-shell-opacity: .38;
+  --ghost-shell-pointer: auto;
+  --ghost-nav-pointer: none;
+  --ghost-nav-delay: var(--ghost-close-wait);
   --ghost-shell-border: transparent;
   --ghost-shell-shadow: 0 4px 14px rgb(0 0 0 / .12);
   --ghost-shell-delay: var(--ghost-close-wait);
   --ghost-shell-time: var(--ghost-close-time);
-  --ghost-shell-fade-delay: 1300ms;
+  --ghost-shell-fade-delay: var(--ghost-close-wait);
   --ghost-content-opacity: 0;
   --ghost-content-visibility: hidden;
   --ghost-content-pointer: none;
   --ghost-content-offset: -5px;
   --ghost-content-scale: .8;
-  --ghost-content-base-delay: 200ms;
-  --ghost-wave-step: -36ms;
+  --ghost-content-base-delay: var(--ghost-close-wait);
+  --ghost-wave-step: 0ms;
+  --ghost-visibility-extra: var(--ghost-content-time);
   --ghost-content-time: 180ms;
-  --ghost-url-delay: 220ms;
+  --ghost-url-delay: var(--ghost-close-wait);
+  --ghost-edit-session: 0;
+  container-name: ghost-navigation;
+  transition: --ghost-edit-session 1ms step-end 2000ms;
 }
 
-/* A narrow deliberate target, instead of covering the page's whole top row. */
+:root[windowtype="navigator:browser"] #navigator-toolbox:is(
+  :has(#urlbar[usertyping][focused]),
+  :has(#urlbar[open]),
+  :has(#urlbar[breakout-extend][focused])
+) {
+  --ghost-edit-session: 1 !important;
+  transition-delay: 0ms;
+}
+
+/* Cancel an already queued hover transition after a submitted address. Firefox
+   computes transition start delays before inherited property animations. */
+@container ghost-navigation style(--ghost-edit-session: 1) {
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #nav-bar::before,
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused])))
+  :is(#nav-bar, #urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
+    transition: none !important;
+  }
+}
+
+/* The top 3px edge is easy to reach; the visible pill is a second target. */
 :root[windowtype="navigator:browser"] #navigator-toolbox::before {
   content: "";
   position: fixed;
   top: 0;
-  left: calc((100vw - var(--ghost-trigger-width)) / 2);
-  width: var(--ghost-trigger-width);
+  left: calc(var(--ghost-rail-width) + 14px);
+  right: 154px;
+  width: auto;
   height: var(--ghost-trigger-height);
   background: transparent;
   pointer-events: auto;
@@ -78,11 +112,16 @@
 /* Hover opens after the wait. Window buttons do not trigger the toolbar. */
 :root[windowtype="navigator:browser"]
 #navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover)) {
+  --ghost-edit-session: 0;
+  transition-delay: 0ms;
   --ghost-shell-width: 100%;
   --ghost-shell-height: var(--ghost-bar-height);
   --ghost-shell-radius: var(--ghost-radius);
   --ghost-shell-opacity: 1;
   --ghost-shell-pointer: auto;
+  --ghost-nav-pointer: auto;
+  --ghost-nav-delay: 0ms;
+  --ghost-visibility-extra: 0ms;
   --ghost-shell-border: var(--ghost-border);
   --ghost-shell-shadow: var(--ghost-shadow);
   --ghost-shell-delay: var(--ghost-open-wait);
@@ -93,10 +132,10 @@
   --ghost-content-pointer: auto;
   --ghost-content-offset: 0px;
   --ghost-content-scale: 1;
-  --ghost-content-base-delay: calc(var(--ghost-open-wait) + 370ms);
+  --ghost-content-base-delay: calc(var(--ghost-open-wait) + 80ms);
   --ghost-wave-step: var(--ghost-icon-stagger);
-  --ghost-content-time: 300ms;
-  --ghost-url-delay: calc(var(--ghost-open-wait) + 230ms);
+  --ghost-content-time: 180ms;
+  --ghost-url-delay: calc(var(--ghost-open-wait) + 40ms);
 }
 
 /* Active editing, deliberate address focus, and open popups skip the wait.
@@ -108,12 +147,15 @@
   :has(#urlbar[breakout-extend][focused])
 ),
 /* Passive tab/sidebar previews must not reveal the navigation toolbar. */
-:root[windowtype="navigator:browser"]:has(:is(panel[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])) #navigator-toolbox {
+:root[windowtype="navigator:browser"]:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])) #navigator-toolbox {
   --ghost-shell-width: 100% !important;
   --ghost-shell-height: var(--ghost-bar-height) !important;
   --ghost-shell-radius: var(--ghost-radius) !important;
   --ghost-shell-opacity: 1 !important;
   --ghost-shell-pointer: auto !important;
+  --ghost-nav-pointer: auto !important;
+  --ghost-nav-delay: 0ms !important;
+  --ghost-visibility-extra: 0ms !important;
   --ghost-shell-border: var(--ghost-border) !important;
   --ghost-shell-shadow: var(--ghost-shadow) !important;
   --ghost-shell-delay: 0ms !important;
@@ -124,7 +166,7 @@
   --ghost-content-pointer: auto !important;
   --ghost-content-offset: 0px !important;
   --ghost-content-scale: 1 !important;
-  --ghost-content-base-delay: 110ms !important;
+  --ghost-content-base-delay: 0ms !important;
   --ghost-wave-step: var(--ghost-icon-stagger) !important;
   --ghost-content-time: 220ms !important;
   --ghost-url-delay: 0ms !important;
@@ -150,7 +192,8 @@
   border: 0 !important;
   box-shadow: none !important;
   overflow: visible !important;
-  pointer-events: none !important;
+  pointer-events: var(--ghost-nav-pointer) !important;
+  transition: pointer-events 1ms step-end var(--ghost-nav-delay) allow-discrete !important;
   color: var(--toolbar-text-color, var(--toolbar-color, #fff)) !important;
   z-index: 101 !important;
 }
@@ -245,7 +288,7 @@
     opacity var(--ghost-content-time) ease var(--ghost-content-delay),
     translate 360ms var(--ghost-ease) var(--ghost-content-delay),
     scale 360ms var(--ghost-icon-ease) var(--ghost-content-delay),
-    visibility 1ms step-end var(--ghost-content-delay) allow-discrete,
+    visibility 1ms step-end calc(var(--ghost-content-delay) + var(--ghost-visibility-extra)) allow-discrete,
     pointer-events 1ms step-end var(--ghost-content-delay) allow-discrete !important;
 }
 
@@ -359,7 +402,7 @@
 
 /* Fullscreen video and F11 use a clean canvas. */
 :root[inFullscreen] :is(#navigator-toolbox::before, #nav-bar, #toolbar-menubar > .titlebar-buttonbox-container) { display: none !important; }
-:root[inFullscreen] :is(#sidebar-container, #sidebar-launcher-splitter, #sidebar-splitter) { display: none !important; }
+:root[inFullscreen] :is(#sidebar-container, #sidebar-box, #sidebar-launcher-splitter, #sidebar-splitter) { display: none !important; }
 :root[inFullscreen] #tabbrowser-tabbox { margin-inline: 0 !important; }
 
 /* Restore normal visible controls while rearranging the toolbar. */

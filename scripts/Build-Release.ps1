@@ -1,6 +1,6 @@
 #requires -Version 5.1
 [CmdletBinding()]
-param([string]$Version = '1.0.1')
+param([string]$Version = '1.0.2')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Use a numeric version such as 1.0.0.' }
 $root = Split-Path $PSScriptRoot -Parent
@@ -11,7 +11,7 @@ if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Force }
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::Open($output, [IO.Compression.ZipArchiveMode]::Create)
 try {
-    # Explicit list: no profiles, state, private backups, screenshots, or Git metadata.
+    # Explicit list: only distributable files and approved demo screenshots.
     foreach ($name in @('Install.cmd','Install.ps1','Uninstall.cmd','Uninstall.ps1',
                          'README.md','README.ru.md','LICENSE','theme/userChrome.css','theme/bonjourr.css',
                          'scripts/GhostUI.psm1','scripts/Select-Profile.ps1',
