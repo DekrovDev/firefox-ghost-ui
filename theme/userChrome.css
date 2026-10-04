@@ -11,6 +11,8 @@
 
 :root {
   --ghost-trigger-height: 3px;
+  --ghost-window-trigger-height: 8px;
+  --ghost-window-close-wait: 250ms;
   --ghost-island-width: 128px;
   --ghost-island-height: 12px;
   --ghost-open-wait: 120ms;
@@ -482,7 +484,8 @@
 }
 :root #downloadsPanel .downloadMainArea { padding-block: 10px !important; }
 
-/* Native window commands stay available independently of the floating bar. */
+/* Window controls reveal independently at the top-right edge.
+   Below the 8px sensor, hidden buttons pass clicks through to the page. */
 :root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar[autohide][inactive] {
   visibility: visible !important;
   height: 0 !important;
@@ -501,15 +504,43 @@
   display: flex !important;
   visibility: visible !important;
   opacity: 1 !important;
-  pointer-events: auto !important;
+  pointer-events: none !important;
   z-index: 103 !important;
   color: var(--toolbar-text-color, var(--toolbar-color, #fff)) !important;
-  background: var(--ghost-solid) !important;
-  border-radius: 0 0 0 10px !important;
+  background: transparent !important;
+}
+:root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 154px;
+  height: var(--ghost-window-trigger-height);
+  pointer-events: auto;
 }
 :root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container > .titlebar-buttonbox {
   display: flex !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  translate: 0 -8px !important;
+  background: var(--ghost-solid) !important;
+  border-radius: 0 0 0 10px !important;
+  transition:
+    opacity 180ms ease var(--ghost-window-close-wait),
+    translate 200ms var(--ghost-ease) var(--ghost-window-close-wait),
+    visibility 1ms step-end calc(var(--ghost-window-close-wait) + 200ms) allow-discrete,
+    pointer-events 1ms step-end calc(var(--ghost-window-close-wait) + 200ms) allow-discrete !important;
+}
+:root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container:is(:hover, :focus-within) > .titlebar-buttonbox {
+  opacity: 1 !important;
+  visibility: visible !important;
   pointer-events: auto !important;
+  translate: 0 0 !important;
+  transition-delay: 0ms !important;
+}
+:root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container > .titlebar-buttonbox > .titlebar-button {
+  pointer-events: inherit !important;
 }
 :root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) :is(#TabsToolbar, #nav-bar) > .titlebar-buttonbox-container { display: none !important; }
 
@@ -593,6 +624,7 @@
   :root { --ghost-open-time: 1ms; --ghost-close-time: 1ms; --ghost-submit-shell-time: 1ms; --ghost-submit-fade-time: 1ms; --ghost-icon-stagger: 0ms; }
   :root #navigator-toolbox { --ghost-shell-time: 1ms !important; --ghost-content-time: 1ms !important; }
   :root #nav-bar::after { animation: none !important; }
+  :root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container > .titlebar-buttonbox { transition-duration: 1ms !important; }
   :root:not([customizing]) #nav-bar-customization-target > #downloads-button { transition-duration: 1ms !important; }
   :root :is(#urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container, #downloads-button), #PanelUI-button, #nav-bar-overflow-button) {
     transition-duration: 1ms !important;

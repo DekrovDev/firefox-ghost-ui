@@ -1,6 +1,6 @@
 #requires -Version 5.1
 [CmdletBinding()]
-param([string]$Version = '1.0.6')
+param([string]$Version = '1.0.7')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Use a numeric version such as 1.0.0.' }
 $root = Split-Path $PSScriptRoot -Parent
