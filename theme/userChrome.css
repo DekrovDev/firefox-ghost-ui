@@ -1,0 +1,367 @@
+/* Ghost UI — Firefox 156+, Windows, native vertical tabs.
+   The toolbar keeps its native layout; only its glass shell changes size.
+   Back up existing chrome/userChrome.css, replace it, then restart Firefox. */
+
+:root {
+  --ghost-trigger-height: 3px;
+  --ghost-trigger-width: 240px;
+  --ghost-island-width: 168px;
+  --ghost-island-height: 7px;
+  --ghost-open-wait: 725ms;
+  --ghost-open-time: 760ms;
+  --ghost-close-wait: 450ms;
+  --ghost-close-time: 560ms;
+  --ghost-bar-height: 46px;
+  --ghost-bar-top: 8px;
+  --ghost-rail-width: 50px;
+  --ghost-radius: 15px;
+  --ghost-icon-stagger: 48ms;
+  --ghost-ease: cubic-bezier(.16, 1, .30, 1);
+  --ghost-icon-ease: cubic-bezier(.34, 1.3, .64, 1);
+  --ghost-surface: color-mix(in srgb, var(--toolbar-background-color, var(--toolbar-bgcolor, #17171b)) 87%, transparent);
+  --ghost-solid: color-mix(in srgb, var(--toolbar-background-color, var(--toolbar-bgcolor, #17171b)) 94%, black 6%);
+  --ghost-border: color-mix(in srgb, var(--toolbar-text-color, var(--toolbar-color, #fff)) 15%, transparent);
+  --ghost-shadow: 0 14px 42px rgb(0 0 0 / .26);
+}
+
+:root[uidensity="compact"] { --ghost-bar-height: 40px; }
+:root[uidensity="touch"] { --ghost-bar-height: 52px; }
+
+/* The browser content occupies the window from the top edge. */
+:root[windowtype="navigator:browser"] #navigator-toolbox {
+  position: fixed !important;
+  inset: 0 0 auto !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+  z-index: 100 !important;
+
+  --ghost-shell-width: var(--ghost-island-width);
+  --ghost-shell-height: var(--ghost-island-height);
+  --ghost-shell-radius: 999px;
+  --ghost-shell-opacity: 0;
+  --ghost-shell-pointer: none;
+  --ghost-shell-border: transparent;
+  --ghost-shell-shadow: 0 4px 14px rgb(0 0 0 / .12);
+  --ghost-shell-delay: var(--ghost-close-wait);
+  --ghost-shell-time: var(--ghost-close-time);
+  --ghost-shell-fade-delay: 1300ms;
+  --ghost-content-opacity: 0;
+  --ghost-content-visibility: hidden;
+  --ghost-content-pointer: none;
+  --ghost-content-offset: -5px;
+  --ghost-content-scale: .8;
+  --ghost-content-base-delay: 200ms;
+  --ghost-wave-step: -36ms;
+  --ghost-content-time: 180ms;
+  --ghost-url-delay: 220ms;
+}
+
+/* A narrow deliberate target, instead of covering the page's whole top row. */
+:root[windowtype="navigator:browser"] #navigator-toolbox::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: calc((100vw - var(--ghost-trigger-width)) / 2);
+  width: var(--ghost-trigger-width);
+  height: var(--ghost-trigger-height);
+  background: transparent;
+  pointer-events: auto;
+  z-index: 102;
+}
+
+/* Hover opens after the wait. Window buttons do not trigger the toolbar. */
+:root[windowtype="navigator:browser"]
+#navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover)) {
+  --ghost-shell-width: 100%;
+  --ghost-shell-height: var(--ghost-bar-height);
+  --ghost-shell-radius: var(--ghost-radius);
+  --ghost-shell-opacity: 1;
+  --ghost-shell-pointer: auto;
+  --ghost-shell-border: var(--ghost-border);
+  --ghost-shell-shadow: var(--ghost-shadow);
+  --ghost-shell-delay: var(--ghost-open-wait);
+  --ghost-shell-time: var(--ghost-open-time);
+  --ghost-shell-fade-delay: 0ms;
+  --ghost-content-opacity: 1;
+  --ghost-content-visibility: visible;
+  --ghost-content-pointer: auto;
+  --ghost-content-offset: 0px;
+  --ghost-content-scale: 1;
+  --ghost-content-base-delay: calc(var(--ghost-open-wait) + 370ms);
+  --ghost-wave-step: var(--ghost-icon-stagger);
+  --ghost-content-time: 300ms;
+  --ghost-url-delay: calc(var(--ghost-open-wait) + 230ms);
+}
+
+/* Active editing, deliberate address focus, and open popups skip the wait.
+   A saved search query may keep usertyping after navigation; require focus.
+   New-tab autofocus alone has neither open nor breakout-extend in Firefox 156. */
+:root[windowtype="navigator:browser"] #navigator-toolbox:is(
+  :has(#urlbar[usertyping][focused]),
+  :has(#urlbar[open]),
+  :has(#urlbar[breakout-extend][focused])
+),
+/* Passive tab/sidebar previews must not reveal the navigation toolbar. */
+:root[windowtype="navigator:browser"]:has(:is(panel[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])) #navigator-toolbox {
+  --ghost-shell-width: 100% !important;
+  --ghost-shell-height: var(--ghost-bar-height) !important;
+  --ghost-shell-radius: var(--ghost-radius) !important;
+  --ghost-shell-opacity: 1 !important;
+  --ghost-shell-pointer: auto !important;
+  --ghost-shell-border: var(--ghost-border) !important;
+  --ghost-shell-shadow: var(--ghost-shadow) !important;
+  --ghost-shell-delay: 0ms !important;
+  --ghost-shell-time: 360ms !important;
+  --ghost-shell-fade-delay: 0ms !important;
+  --ghost-content-opacity: 1 !important;
+  --ghost-content-visibility: visible !important;
+  --ghost-content-pointer: auto !important;
+  --ghost-content-offset: 0px !important;
+  --ghost-content-scale: 1 !important;
+  --ghost-content-base-delay: 110ms !important;
+  --ghost-wave-step: var(--ghost-icon-stagger) !important;
+  --ghost-content-time: 220ms !important;
+  --ghost-url-delay: 0ms !important;
+}
+
+/* Keep the real toolbar full sized to avoid native overflow/reordering. */
+:root[windowtype="navigator:browser"] #nav-bar.browser-toolbar {
+  position: fixed !important;
+  top: var(--ghost-bar-top) !important;
+  left: calc(var(--ghost-rail-width) + 14px) !important;
+  right: 154px !important;
+  width: auto !important;
+  max-width: 1500px !important;
+  min-width: 0 !important;
+  height: var(--ghost-bar-height) !important;
+  min-height: var(--ghost-bar-height) !important;
+  max-height: var(--ghost-bar-height) !important;
+  margin: 0 auto !important;
+  padding: 4px 10px !important;
+  box-sizing: border-box !important;
+  transform: none !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+  color: var(--toolbar-text-color, var(--toolbar-color, #fff)) !important;
+  z-index: 101 !important;
+}
+
+:root[windowtype="navigator:browser"] #nav-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: var(--ghost-shell-width);
+  height: var(--ghost-shell-height);
+  margin-inline: auto;
+  box-sizing: border-box;
+  border: 1px solid var(--ghost-shell-border);
+  border-radius: var(--ghost-shell-radius);
+  background: var(--ghost-surface);
+  backdrop-filter: blur(22px) saturate(1.15);
+  box-shadow: var(--ghost-shell-shadow);
+  opacity: var(--ghost-shell-opacity);
+  pointer-events: var(--ghost-shell-pointer);
+  transition:
+    width var(--ghost-shell-time) var(--ghost-ease) var(--ghost-shell-delay),
+    height var(--ghost-shell-time) var(--ghost-ease) var(--ghost-shell-delay),
+    border-radius var(--ghost-shell-time) var(--ghost-ease) var(--ghost-shell-delay),
+    border-color 300ms ease var(--ghost-shell-delay),
+    box-shadow 360ms ease var(--ghost-shell-delay),
+    background-color 420ms ease,
+    opacity 180ms ease var(--ghost-shell-fade-delay);
+}
+
+:root[windowtype="navigator:browser"] #nav-bar::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 0;
+  right: 0;
+  width: calc(var(--ghost-island-width) - 4px);
+  height: calc(var(--ghost-island-height) - 2px);
+  margin-inline: auto;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--toolbar-text-color, var(--toolbar-color, #fff)) 45%, transparent), transparent);
+  opacity: 0;
+}
+
+:root[windowtype="navigator:browser"]
+#navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover)) #nav-bar::after {
+  animation: ghost-charge var(--ghost-open-wait) linear both;
+}
+
+@keyframes ghost-charge {
+  0% { opacity: .1; scale: .2 1; }
+  90% { opacity: .6; scale: 1 1; }
+  100% { opacity: 0; scale: 1 1; }
+}
+
+/* Pointer transitions prevent transparent controls intercepting page clicks. */
+:root[windowtype="navigator:browser"] #nav-bar-customization-target {
+  min-width: 0 !important;
+  flex: 1 1 0% !important;
+  pointer-events: none !important;
+}
+
+:root[windowtype="navigator:browser"] #urlbar-container {
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  transform: none !important;
+  pointer-events: var(--ghost-content-pointer) !important;
+  transition: pointer-events 1ms step-end var(--ghost-url-delay) allow-discrete !important;
+}
+
+:root[windowtype="navigator:browser"] #urlbar {
+  opacity: var(--ghost-content-opacity) !important;
+  pointer-events: var(--ghost-content-pointer) !important;
+  transition:
+    opacity 260ms ease var(--ghost-url-delay),
+    pointer-events 1ms step-end var(--ghost-url-delay) allow-discrete !important;
+}
+
+:root[windowtype="navigator:browser"]
+:is(#nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
+  --ghost-wave: 3;
+  --ghost-fold-x: -8px;
+  --ghost-content-delay: max(0ms, calc(var(--ghost-content-base-delay) + min(var(--ghost-wave), 5) * var(--ghost-wave-step)));
+  opacity: var(--ghost-content-opacity) !important;
+  visibility: var(--ghost-content-visibility) !important;
+  pointer-events: var(--ghost-content-pointer) !important;
+  translate: calc(var(--ghost-fold-x) * (1 - var(--ghost-content-opacity))) var(--ghost-content-offset) !important;
+  scale: var(--ghost-content-scale) !important;
+  transition:
+    opacity var(--ghost-content-time) ease var(--ghost-content-delay),
+    translate 360ms var(--ghost-ease) var(--ghost-content-delay),
+    scale 360ms var(--ghost-icon-ease) var(--ghost-content-delay),
+    visibility 1ms step-end var(--ghost-content-delay) allow-discrete,
+    pointer-events 1ms step-end var(--ghost-content-delay) allow-discrete !important;
+}
+
+/* Count outward from the address field; pinned extensions join automatically. */
+:root #nav-bar-customization-target > :has(~ #urlbar-container) { --ghost-fold-x: 8px; }
+:root #nav-bar-customization-target > :nth-last-child(1 of :has(~ #urlbar-container):not(toolbarspring, #vertical-spacer)),
+:root #nav-bar-customization-target > :nth-child(1 of #urlbar-container ~ :not(toolbarspring, #vertical-spacer)) { --ghost-wave: 0; }
+:root #nav-bar-customization-target > :nth-last-child(2 of :has(~ #urlbar-container):not(toolbarspring, #vertical-spacer)),
+:root #nav-bar-customization-target > :nth-child(2 of #urlbar-container ~ :not(toolbarspring, #vertical-spacer)) { --ghost-wave: 1; }
+:root #nav-bar-customization-target > :nth-last-child(3 of :has(~ #urlbar-container):not(toolbarspring, #vertical-spacer)),
+:root #nav-bar-customization-target > :nth-child(3 of #urlbar-container ~ :not(toolbarspring, #vertical-spacer)) { --ghost-wave: 2; }
+:root #nav-bar-customization-target > :nth-last-child(4 of :has(~ #urlbar-container):not(toolbarspring, #vertical-spacer)),
+:root #nav-bar-customization-target > :nth-child(4 of #urlbar-container ~ :not(toolbarspring, #vertical-spacer)) { --ghost-wave: 3; }
+:root #nav-bar-customization-target > :nth-last-child(5 of :has(~ #urlbar-container):not(toolbarspring, #vertical-spacer)),
+:root #nav-bar-customization-target > :nth-child(5 of #urlbar-container ~ :not(toolbarspring, #vertical-spacer)) { --ghost-wave: 4; }
+:root #nav-bar-customization-target > :nth-child(n+6 of #urlbar-container ~ :not(toolbarspring, #vertical-spacer)) { --ghost-wave: 5; }
+:root #PanelUI-button, :root #nav-bar-overflow-button { --ghost-wave: 6; }
+
+/* Avoid decorative flexible spacers taking space away from the address field. */
+:root[windowtype="navigator:browser"] #nav-bar-customization-target > :is(toolbarspring, #vertical-spacer) {
+  display: none !important;
+}
+
+:root[windowtype="navigator:browser"] #urlbar-background {
+  border-radius: 11px !important;
+  border: 1px solid var(--ghost-border) !important;
+  background-color: var(--ghost-solid) !important;
+  transition: background-color 420ms ease, border-color 200ms ease !important;
+}
+
+:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1 > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  transition: scale 140ms var(--ghost-ease), background-color 140ms ease !important;
+}
+:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) { scale: 1.075; }
+:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:active > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) { scale: .93; }
+
+/* Native window commands stay available independently of the floating bar. */
+:root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar[autohide][inactive] {
+  visibility: visible !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding-block: 0 !important;
+  overflow: visible !important;
+}
+:root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar[autohide][inactive] > :not(.titlebar-buttonbox-container) {
+  visibility: collapse !important;
+  pointer-events: none !important;
+}
+:root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 103 !important;
+  color: var(--toolbar-text-color, var(--toolbar-color, #fff)) !important;
+  background: var(--ghost-solid) !important;
+  border-radius: 0 0 0 10px !important;
+}
+:root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container > .titlebar-buttonbox {
+  display: flex !important;
+  pointer-events: auto !important;
+}
+:root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) :is(#TabsToolbar, #nav-bar) > .titlebar-buttonbox-container { display: none !important; }
+
+/* Native hover expansion already preserves the content rectangle. */
+:root[windowtype="navigator:browser"] :is(#sidebar-container, #tabbrowser-tabbox) {
+  --sidebar-launcher-collapsed-width: var(--ghost-rail-width) !important;
+}
+:root[windowtype="navigator:browser"] #sidebar-container {
+  --sidebar-background-color: var(--ghost-solid);
+}
+:root[sidebar-expand-on-hover] #sidebar-container[sidebar-launcher-expanded] {
+  border-radius: 0 14px 14px 0 !important;
+  box-shadow: 8px 0 28px rgb(0 0 0 / .2) !important;
+}
+
+/* Fullscreen video and F11 use a clean canvas. */
+:root[inFullscreen] :is(#navigator-toolbox::before, #nav-bar, #toolbar-menubar > .titlebar-buttonbox-container) { display: none !important; }
+:root[inFullscreen] :is(#sidebar-container, #sidebar-launcher-splitter, #sidebar-splitter) { display: none !important; }
+:root[inFullscreen] #tabbrowser-tabbox { margin-inline: 0 !important; }
+
+/* Restore normal visible controls while rearranging the toolbar. */
+:root[customizing] #navigator-toolbox {
+  position: relative !important;
+  height: auto !important;
+  max-height: none !important;
+  pointer-events: auto !important;
+  --ghost-content-opacity: 1;
+  --ghost-content-visibility: visible;
+  --ghost-content-pointer: auto;
+  --ghost-content-offset: 0px;
+  --ghost-content-scale: 1;
+  --ghost-content-base-delay: 0ms;
+  --ghost-wave-step: 0ms;
+  --ghost-url-delay: 0ms;
+}
+:root[customizing] #nav-bar.browser-toolbar {
+  position: relative !important;
+  inset: auto !important;
+  width: auto !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: none !important;
+  background: var(--toolbar-bgcolor) !important;
+  pointer-events: auto !important;
+}
+:root[customizing] :is(#navigator-toolbox::before, #nav-bar::before, #nav-bar::after) { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --ghost-open-time: 1ms; --ghost-close-time: 1ms; --ghost-icon-stagger: 0ms; }
+  :root #navigator-toolbox { --ghost-shell-time: 1ms !important; --ghost-content-time: 1ms !important; }
+  :root #nav-bar::after { animation: none !important; }
+  :root :is(#urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
+    transition-duration: 1ms !important;
+  }
+}

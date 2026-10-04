@@ -1,0 +1,56 @@
+/* Ghost UI for Bonjourr 22.3. Keep the existing wallpaper and layout. */
+
+#time {
+  animation: ghost-newtab-in 650ms cubic-bezier(.16, 1, .3, 1) 80ms both;
+}
+#greetings {
+  animation: ghost-newtab-in 650ms cubic-bezier(.16, 1, .3, 1) 180ms both;
+}
+#weather:not(.wait) {
+  animation: ghost-newtab-in 650ms cubic-bezier(.16, 1, .3, 1) 280ms both;
+}
+#linkblocks {
+  animation: ghost-newtab-in 650ms cubic-bezier(.16, 1, .3, 1) 400ms both;
+}
+#linkblocks > * {
+  --ghost-link-wave: 0;
+  animation: ghost-newtab-in 450ms cubic-bezier(.16, 1, .3, 1) calc(420ms + var(--ghost-link-wave) * 45ms) both;
+}
+#linkblocks > :nth-child(2) { --ghost-link-wave: 1; }
+#linkblocks > :nth-child(3) { --ghost-link-wave: 2; }
+#linkblocks > :nth-child(4) { --ghost-link-wave: 3; }
+#linkblocks > :nth-child(5) { --ghost-link-wave: 4; }
+#linkblocks > :nth-child(n+6) { --ghost-link-wave: 5; }
+#quotes_container {
+  animation: ghost-newtab-in 650ms cubic-bezier(.16, 1, .3, 1) 460ms both;
+}
+
+#linkblocks a {
+  border-radius: 14px;
+  transition: translate 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+#linkblocks a:hover {
+  translate: 0 -2px;
+  background-color: rgb(255 255 255 / .08);
+  box-shadow: 0 5px 16px rgb(0 0 0 / .14);
+}
+#linkblocks a:active { translate: 0 0; }
+
+/* Keep settings available even if the old configuration hid its button. */
+#show-settings {
+  opacity: .3;
+  transition: opacity 160ms ease;
+}
+#show-settings:hover, #show-settings:focus-within { opacity: 1; }
+
+@keyframes ghost-newtab-in {
+  from { opacity: 0; translate: 0 6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #time, #greetings, #weather, #linkblocks, #linkblocks > *, #quotes_container {
+    animation: none !important;
+  }
+  #linkblocks a { transition: none !important; }
+}

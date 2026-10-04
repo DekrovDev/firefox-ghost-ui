@@ -1,0 +1,7 @@
+dist/
+*.zip
+*.log
+test-output/
+*-profile/
+backups/
+state.json
