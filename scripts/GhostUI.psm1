@@ -1,6 +1,6 @@
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
-$script:Version = '1.0.3'
+$script:Version = '1.0.4'
 $script:PreferenceValues = [ordered]@{
     'toolkit.legacyUserProfileCustomizations.stylesheets' = $true
     'sidebar.revamp' = $true

@@ -17,6 +17,8 @@
   --ghost-open-time: 360ms;
   --ghost-close-wait: 2000ms;
   --ghost-close-time: 280ms;
+  --ghost-submit-shell-time: 320ms;
+  --ghost-submit-fade-time: 260ms;
   --ghost-bar-height: 46px;
   --ghost-bar-top: 8px;
   --ghost-rail-width: 50px;
@@ -82,9 +84,14 @@
   --ghost-edit-session: 1 !important;
   transition-delay: 0ms;
 }
+@property --ghost-submit-opacity {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
 
-/* Cancel an already queued hover transition after a submitted address. Firefox
-   computes transition start delays before inherited property animations. */
+/* Replace the queued hover transition with a short submission animation.
+   Firefox computes transition delays before inherited property animations. */
 @container ghost-navigation style(--ghost-edit-session: 1) {
   :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #nav-bar::before,
@@ -93,6 +100,44 @@
   :is(#nav-bar, #urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
     transition: none !important;
   }
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #nav-bar::before {
+    animation: ghost-submit-shell var(--ghost-submit-shell-time) ease-in-out both !important;
+  }
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #urlbar {
+    opacity: var(--ghost-submit-opacity) !important;
+    animation: ghost-submit-fade var(--ghost-submit-fade-time) ease-out both !important;
+  }
+  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"]), menupopup[open="true"])))
+  #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused])))
+  :is(#nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
+    opacity: var(--ghost-submit-opacity) !important;
+    visibility: var(--ghost-submit-visibility, hidden) !important;
+    animation: ghost-submit-icons var(--ghost-submit-fade-time) ease-out both !important;
+  }
+}
+
+@keyframes ghost-submit-shell {
+  from {
+    width: 100%; height: var(--ghost-bar-height); opacity: 1;
+    border-radius: var(--ghost-radius); border-color: var(--ghost-border);
+    box-shadow: var(--ghost-shadow);
+  }
+  to {
+    width: var(--ghost-island-width); height: var(--ghost-island-height); opacity: .38;
+    border-radius: 999px; border-color: transparent;
+    box-shadow: 0 4px 14px rgb(0 0 0 / .12);
+  }
+}
+@keyframes ghost-submit-fade {
+  from { --ghost-submit-opacity: 1; translate: 0 0; }
+  to { --ghost-submit-opacity: 0; translate: 0 -3px; }
+}
+@keyframes ghost-submit-icons {
+  from { --ghost-submit-opacity: 1; --ghost-submit-visibility: visible; }
+  99.9% { --ghost-submit-visibility: visible; }
+  to { --ghost-submit-opacity: 0; --ghost-submit-visibility: hidden; }
 }
 
 /* The top 3px edge is easy to reach; the visible pill is a second target. */
@@ -433,7 +478,7 @@
 :root[customizing] :is(#navigator-toolbox::before, #nav-bar::before, #nav-bar::after) { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --ghost-open-time: 1ms; --ghost-close-time: 1ms; --ghost-icon-stagger: 0ms; }
+  :root { --ghost-open-time: 1ms; --ghost-close-time: 1ms; --ghost-submit-shell-time: 1ms; --ghost-submit-fade-time: 1ms; --ghost-icon-stagger: 0ms; }
   :root #navigator-toolbox { --ghost-shell-time: 1ms !important; --ghost-content-time: 1ms !important; }
   :root #nav-bar::after { animation: none !important; }
   :root :is(#urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container), #PanelUI-button, #nav-bar-overflow-button) {
