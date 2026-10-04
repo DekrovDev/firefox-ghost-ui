@@ -4,6 +4,27 @@
 
 A floating Firefox toolbar that stays out of the way, with native vertical tabs and optional Bonjourr animations.
 
+![Firefox Ghost UI with a clean new tab, central search and a collapsed sidebar](docs/images/new-tab.png)
+
+**A clean new tab.** The toolbar stays hidden while the central Bonjourr search remains available.
+
+<details>
+<summary>See the floating toolbar and expanded sidebar</summary>
+
+**Search when you need it.** Press Ctrl+L to open the native address bar immediately.
+
+![Firefox Ghost UI with the floating toolbar open and an active search](docs/images/floating-toolbar.png)
+
+**Tabs within reach.** Hover over the sidebar to reveal tab titles without shifting the page or opening the toolbar.
+
+![Firefox Ghost UI with an expanded sidebar and the navigation toolbar hidden](docs/images/sidebar.png)
+
+</details>
+
+Screenshots use an English demo profile with optional [Bonjourr](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/). Its wallpaper, clock, weather and central search are configured separately; the installer preserves your own settings and language. The [background video](https://pixabay.com/videos/id-83880/) comes from Bonjourr's media library and is not bundled with the installer.
+
+## Features
+
 - Hover at the top center: a small island appears, then opens after **725 ms**.
 - **Ctrl+L** opens the address bar immediately.
 - After you submit a search, the toolbar collapses when editing ends and suggestions close. A saved query no longer keeps it open.
