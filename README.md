@@ -30,7 +30,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 - After you submit a search, the toolbar collapses when editing ends and suggestions close. A saved query no longer keeps it open.
 - Menus, extension popups, and active typing keep the toolbar available.
 - Native window buttons stay accessible independently of the toolbar.
-- The sidebar expands on hover over the page, without shifting the page. Passive tab previews do not reveal the toolbar.
+- The sidebar expands on hover over the page, without shifting the page. While a side tool is open, tabs stay in a compact icon rail so its controls remain visible and stationary. Closing the tool restores normal hover expansion. Passive tab previews do not reveal the toolbar.
 - The hidden toolbar passes clicks through, except for its 3-pixel activation strip at the top center.
 - F11 and fullscreen video hide the floating controls and sidebar.
 - Supports reduced motion and Adaptive Tab Bar Colour theme colors.
@@ -99,7 +99,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.0
+./scripts/Build-Release.ps1 -Version 1.0.1
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.

@@ -325,6 +325,38 @@
   box-shadow: 8px 0 28px rgb(0 0 0 / .2) !important;
 }
 
+/* Keep a compact rail beside side tools. Hover must neither cover the tool nor
+   move its controls just as the pointer reaches them. Native hover compensation
+   is unnecessary because this rail remains in flow. */
+:root[windowtype="navigator:browser"][sidebar-expand-on-hover] #sidebar-container[sidebar-panel-open] {
+  position: relative !important;
+  width: var(--ghost-rail-width) !important;
+  min-width: var(--ghost-rail-width) !important;
+  max-width: var(--ghost-rail-width) !important;
+  --sidebar-expanded-launcher-width: var(--ghost-rail-width);
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+:root[windowtype="navigator:browser"][sidebar-expand-on-hover] #sidebar-container[sidebar-panel-open] :is(#vertical-tabs, #tabbrowser-tabs) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  --tab-icon-end-margin: 0px;
+}
+:root[windowtype="navigator:browser"][sidebar-expand-on-hover] #sidebar-container[sidebar-panel-open] .tabbrowser-tab {
+  width: var(--ghost-rail-width) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+:root[windowtype="navigator:browser"][sidebar-expand-on-hover] #sidebar-container[sidebar-panel-open] :is(.tab-label-container, .tab-close-button) {
+  display: none !important;
+}
+:root[windowtype="navigator:browser"][sidebar-expand-on-hover] #sidebar-container[sidebar-panel-open] .tab-content {
+  justify-content: center !important;
+}
+:root[windowtype="navigator:browser"][sidebar-expand-on-hover] #sidebar-box[sidebar-panel-open] {
+  margin-inline: 0 !important;
+}
+
 /* Fullscreen video and F11 use a clean canvas. */
 :root[inFullscreen] :is(#navigator-toolbox::before, #nav-bar, #toolbar-menubar > .titlebar-buttonbox-container) { display: none !important; }
 :root[inFullscreen] :is(#sidebar-container, #sidebar-launcher-splitter, #sidebar-splitter) { display: none !important; }

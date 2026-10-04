@@ -36,7 +36,15 @@ try {
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '--ghost-open-wait: 725ms;') 'Release keeps 725ms delay'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '#urlbar\[usertyping\]\[focused\]') 'Search autohide fix included'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match ':not\(\[role="tooltip"\]\)') 'Passive previews excluded from toolbar hold'
+    # An older installation keeps its original backup while receiving the new
+    # theme and current version metadata.
+    $statePath = Join-Path $fresh 'chrome\ghost-ui\state.json'
+    $oldState = Read-TestFile $statePath | ConvertFrom-Json
+    $oldState.version = '1.0.0'
+    Write-TestFile $statePath ($oldState | ConvertTo-Json -Depth 12)
     $again = Install-GhostUI $fresh $theme
+    $updatedState = Read-TestFile $statePath | ConvertFrom-Json
+    Assert ([version]$updatedState.version -gt [version]'1.0.0') 'Update refreshes release version metadata'
     Assert ($again.Backup -eq $r.Backup) 'Update preserves first backup'
     Assert (([regex]::Matches((Read-TestFile (Join-Path $fresh 'user.js')), 'BEGIN FIREFOX GHOST UI')).Count -eq 1) 'Reinstall is idempotent'
     # Emulate Firefox persisting the installer preferences, plus later unrelated changes.

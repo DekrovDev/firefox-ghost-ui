@@ -1,5 +1,6 @@
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
+$script:Version = '1.0.1'
 $script:PreferenceValues = [ordered]@{
     'toolkit.legacyUserProfileCustomizations.stylesheets' = $true
     'sidebar.revamp' = $true
@@ -175,7 +176,7 @@ function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
             $originals = @(New-GhostSnapshot $profile $backup @('user.js', 'chrome/userChrome.css', 'chrome/userContent.css'))
             $text = Read-GhostText (Join-Path $profile 'prefs.js')
             $preferences = @($script:PreferenceValues.Keys | ForEach-Object { Get-GhostPreference $text $_ })
-            $state = [pscustomobject]@{ schema = 1; version = '1.0.0'; backupName = $stamp; originals = $originals; preferences = $preferences; hashes = @{} }
+            $state = [pscustomobject]@{ schema = 1; version = $script:Version; backupName = $stamp; originals = $originals; preferences = $preferences; hashes = @{} }
             foreach ($kind in @('userChrome', 'userContent')) {
                 $original = Join-Path $backup "chrome/$kind.css"
                 if (Test-Path -LiteralPath $original) {
@@ -218,6 +219,7 @@ function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
             $hashes[$name] = Get-GhostHash (Join-Path $profile $name)
         }
         $state.hashes = $hashes
+        $state.version = $script:Version
         Write-GhostText (Join-Path $payload 'state.json') ($state | ConvertTo-Json -Depth 8)
         return [pscustomobject]@{ Profile = $profile; Backup = $backup; BonjourrStyled = [bool]$bonjourrUUID }
     } catch {
