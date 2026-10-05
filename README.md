@@ -61,6 +61,8 @@ The browser theme works without extensions. For the new-tab page and additional 
 
 Firefox asks you to confirm extension installation. Ghost UI does not bundle extensions or bypass that confirmation. Your existing Bonjourr settings are preserved; no personal wallpaper, location, account, or links are imported from this project.
 
+To show Bonjourr when Firefox starts or opens a new window, open **Settings → Home** and select **Bonjourr** under **Homepage and new windows** as well as **New tabs**. These are separate settings: choosing Bonjourr for new tabs alone can leave Firefox Home at startup, which looks empty if its widgets are disabled. The installer preserves your homepage and session-restore preferences.
+
 ## Update or uninstall
 
 To update, download a newer release, extract it, close Firefox, and run **Install.cmd**. Reinstalling preserves the original pre-install backup and does not duplicate configuration blocks.
