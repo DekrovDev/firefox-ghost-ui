@@ -4,6 +4,8 @@
 
 A floating Firefox toolbar that stays out of the way, with native vertical tabs and optional Bonjourr animations.
 
+**Extensions play a major role in the appearance.** Ghost UI provides the floating controls, sidebar layout and animations; the [extensions below](#extensions-and-the-complete-look) add the new-tab background and widgets, adaptive browser colors, and optional lighting around YouTube videos. Configure them alongside the theme to get the complete look.
+
 ![Firefox Ghost UI with a clean new tab, central search and a collapsed sidebar](docs/images/new-tab.png)
 
 **A clean new tab.** The toolbar stays hidden while the central Bonjourr search remains available.
@@ -51,13 +53,13 @@ No administrator access, Git, Python, or additional PowerShell modules are neede
 
 **Compatibility:** designed and visually tested on Firefox **156.0.1 for Windows**. Installer checks run on Windows PowerShell 5.1 and PowerShell 7. Other Firefox versions and operating systems have not been verified.
 
-## Optional extensions
+## Extensions and the complete look
 
-The browser theme works without extensions. For the new-tab page and additional color/video effects:
+For a setup close to the screenshots, use **Bonjourr** for the new-tab page and **Adaptive Tab Bar Colour** for browser colors that blend with the current website. **Ambient Light for YouTube** adds an optional video effect. Ghost UI also works on its own; the extensions contribute these parts of the appearance:
 
-- [Bonjourr](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/) — new-tab page. After installing it, close Firefox and run **Install.cmd again** to apply its animations automatically. Enable Bonjourr's search widget in its own settings if you want central search.
-- [Adaptive Tab Bar Colour](https://addons.mozilla.org/firefox/addon/adaptive-tab-bar-colour/) — toolbar colors follow the page.
-- [Ambient Light for YouTube](https://addons.mozilla.org/firefox/addon/ambient-light-for-youtube/) — an optional YouTube effect.
+- [Bonjourr](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/) — the wallpaper or video background, clock, weather, greeting, quotes, quick links and central search on the new-tab page. These are configured in Bonjourr. After installing it, close Firefox and run **Install.cmd again** to apply Ghost UI's animations automatically. Enable its search widget if you want central search.
+- [Adaptive Tab Bar Colour](https://addons.mozilla.org/firefox/addon/adaptive-tab-bar-colour/) — matches Firefox's theme colors to the current website. Ghost UI uses those colors for its surfaces, helping the floating toolbar and sidebar blend with the page. Recommended for the adaptive color effect.
+- [Ambient Light for YouTube](https://addons.mozilla.org/firefox/addon/ambient-light-for-youtube/) — adds lighting around YouTube videos based on the image being played. It enhances the video page and is optional for the rest of the browser layout.
 
 Firefox asks you to confirm extension installation. Ghost UI does not bundle extensions or bypass that confirmation. Your existing Bonjourr settings are preserved; no personal wallpaper, location, account, or links are imported from this project.
 
