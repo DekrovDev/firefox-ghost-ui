@@ -12,6 +12,7 @@
 :root {
   --ghost-trigger-height: 3px;
   --ghost-window-trigger-height: 8px;
+  --ghost-window-restored-trigger-height: 16px;
   --ghost-window-close-wait: 250ms;
   --ghost-island-width: 128px;
   --ghost-island-height: 12px;
@@ -38,6 +39,12 @@
 
 :root[uidensity="compact"] { --ghost-bar-height: 40px; }
 :root[uidensity="touch"] { --ghost-bar-height: 52px; }
+
+/* The restored window's native resize frame can consume the top 8px.
+   Extend only the corner sensor into the client area; keep the rest clickable. */
+:root[sizemode="normal"] {
+  --ghost-window-trigger-height: var(--ghost-window-restored-trigger-height);
+}
 
 /* The browser content occupies the window from the top edge. */
 :root[windowtype="navigator:browser"] #navigator-toolbox {
@@ -485,7 +492,7 @@
 :root #downloadsPanel .downloadMainArea { padding-block: 10px !important; }
 
 /* Window controls reveal independently at the top-right edge.
-   Below the 8px sensor, hidden buttons pass clicks through to the page. */
+   Below the corner sensor, hidden buttons pass clicks through to the page. */
 :root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar[autohide][inactive] {
   visibility: visible !important;
   height: 0 !important;
@@ -506,6 +513,7 @@
   opacity: 1 !important;
   pointer-events: none !important;
   z-index: 103 !important;
+  -moz-window-dragging: no-drag !important;
   color: var(--toolbar-text-color, var(--toolbar-color, #fff)) !important;
   background: transparent !important;
 }
@@ -517,9 +525,11 @@
   width: 154px;
   height: var(--ghost-window-trigger-height);
   pointer-events: auto;
+  -moz-window-dragging: no-drag;
 }
 :root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container > .titlebar-buttonbox {
   display: flex !important;
+  appearance: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
