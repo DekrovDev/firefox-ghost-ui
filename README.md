@@ -120,4 +120,6 @@ The tests use disposable profiles only and cover first install, updates, existin
 
 The browser behavior was also checked with real mouse/keyboard actions on Firefox 156.0.1: Ctrl+L, Enter, menus, extension popups, sidebar overlay, adaptive colors, fullscreen, customization, reduced motion, and native window commands at multiple window sizes.
 
+The download-island changes in **1.0.9** were additionally checked on **Firefox 157.0.1 for Windows**: real downloads, brief start/finish notices, file-list clicks, safety badges, reduced motion and alignment at 100%, 125% and 150% scaling. These are targeted download checks; the earlier full-interface checks above used 156.0.1.
+
 MIT license. Firefox, Bonjourr, and the linked extensions are separate projects; this is an independent customization.
