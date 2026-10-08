@@ -65,6 +65,19 @@ Firefox asks you to confirm extension installation. Ghost UI does not bundle ext
 
 To show Bonjourr when Firefox starts or opens a new window, open **Settings → Home** and select **Bonjourr** under **Homepage and new windows** as well as **New tabs**. These are separate settings: choosing Bonjourr for new tabs alone can leave Firefox Home at startup, which looks empty if its widgets are disabled. The installer preserves your homepage and session-restore preferences.
 
+## Bonjourr credits and official sources
+
+[Bonjourr](https://bonjourr.fr/) is created by **[Tahoe Beetschen (morceaudebois)](https://github.com/morceaudebois)** and **[Victor Azevedo (victrme)](https://github.com/victrme)**, with help from its [contributors](https://github.com/victrme/Bonjourr/graphs/contributors). Thank you to its authors and community for the startpage used in this setup.
+
+- [Official website](https://bonjourr.fr/)
+- [Original source code — victrme/Bonjourr](https://github.com/victrme/Bonjourr)
+- [Official documentation](https://bonjourr.fr/docs/)
+- [Install Bonjourr for Firefox — Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/)
+
+Bonjourr provides the new-tab backgrounds, clock, weather, greeting, quotes, quick links and central search shown in this setup. Firefox Ghost UI adds its own optional CSS styling and animations for compatibility with that page. **Bonjourr is installed separately from the official source; the extension itself is not redistributed or bundled with the Ghost UI installer.**
+
+Bonjourr has its own [GPL-3.0 license](https://github.com/victrme/Bonjourr/blob/master/LICENSE.md). The MIT license in this repository applies to Ghost UI's own code.
+
 ## Update or uninstall
 
 To update, download a newer release, extract it, close Firefox, and run **Install.cmd**. Reinstalling preserves the original pre-install backup and does not duplicate configuration blocks.
