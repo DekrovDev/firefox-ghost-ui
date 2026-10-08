@@ -423,37 +423,133 @@
   transition-delay: 0ms !important;
 }
 :root:not([customizing]) #nav-bar-customization-target > #downloads-button > .toolbarbutton-badge-stack {
+  width: 40px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
   border-radius: 12px !important;
   background-color: transparent !important;
 }
 :root:not([customizing]) #nav-bar-customization-target > #downloads-button:hover > .toolbarbutton-badge-stack {
   background-color: color-mix(in srgb, currentColor 10%, transparent) !important;
 }
-:root:not([customizing]) #downloads-button::before {
+/* One centered glyph: the arrow settles into its tray, then the progress
+   track folds into a check. Native notification sprites run invisibly so
+   Firefox receives their animationend events and clears notification state. */
+:root:not([customizing]) #downloads-indicator-anchor {
+  position: relative !important;
+  display: block !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  list-style-image: none !important;
+}
+:root:not([customizing]) #downloads-indicator-icon {
+  visibility: hidden !important;
+}
+:root:not([customizing]) :is(#downloads-indicator-start-box, #downloads-indicator-finish-box) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+:root:not([customizing]) #downloads-indicator-anchor::before,
+:root:not([customizing]) #downloads-indicator-anchor::after {
   content: "";
   position: absolute;
-  top: -9px;
-  left: calc(50% - 1px);
-  width: 2px;
-  height: 8px;
-  background: linear-gradient(transparent, var(--ghost-border));
+  inset: 0;
+  background: currentColor;
+  mask: center / 20px 20px no-repeat;
   pointer-events: none;
+  transition: opacity 180ms ease;
 }
-/* The arrow stays in the middle of a larger native progress ring. */
-:root:not([customizing]) #downloads-button[progress]:not([notification]) #downloads-indicator-icon {
-  visibility: visible !important;
+:root:not([customizing]) #downloads-indicator-anchor::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 2v11m-4-4 4 4 4-4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+:root:not([customizing]) #downloads-indicator-anchor::after {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 14v3h14v-3' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+:root:not([customizing]) #downloads-button[notification="start"] #downloads-indicator-anchor::before {
+  animation: ghost-download-arrow 700ms var(--ghost-ease) both;
+}
+:root:not([customizing]) #downloads-button:is([notification="finish"], [attention="success"]:not([progress])) #downloads-indicator-anchor::before,
+:root:not([customizing]) #downloads-button:is([notification="finish"], [attention="success"]:not([progress])) #downloads-indicator-anchor::after {
+  opacity: 0;
+}
+@keyframes ghost-download-arrow {
+  from { opacity: 0; transform: translateY(-5px); }
+  30% { opacity: 1; transform: translateY(-3px); }
+  70% { transform: translateY(1px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Reuse Firefox's real percentage, but draw a small horizontal track below
+   the glyph instead of a ring. Its geometry is independent of native sprites. */
+:root:not([customizing]) #downloads-indicator-progress-outer {
+  --ghost-track-y: 12px;
+  --ghost-track-height: 3px;
+  top: calc(50% + var(--ghost-track-y)) !important;
+  left: calc(50% - 12px) !important;
+  width: 24px !important;
+  height: var(--ghost-track-height) !important;
+  border-radius: 2px !important;
+  overflow: hidden !important;
+  background: color-mix(in srgb, currentColor 16%, transparent) !important;
+  box-shadow: none !important;
+  clip-path: polygon(0 0, 50% 0, 100% 0, 100% 100%, 50% 100%, 0 100%);
 }
 :root:not([customizing]) #downloads-button[progress] #downloads-indicator-progress-outer {
-  width: 30px !important;
-  height: 30px !important;
-  border-radius: 50%;
-  background: none !important;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+  visibility: visible !important;
 }
-:root:not([customizing]) #downloads-button[progress] #downloads-indicator-progress-inner {
-  width: 30px !important;
-  height: 30px !important;
-  mask-image: radial-gradient(circle, transparent 57%, black 60%);
+:root:not([customizing]) #downloads-button:is([notification="finish"], [attention="success"]:not([progress])) #downloads-indicator-progress-outer {
+  visibility: visible !important;
+  --ghost-track-y: -12px;
+  --ghost-track-height: 24px;
+  border-radius: 0 !important;
+  background: var(--toolbarbutton-icon-fill-attention) !important;
+  clip-path: polygon(10% 50%, 22% 38%, 42% 58%, 78% 22%, 90% 34%, 42% 82%);
+}
+:root:not([customizing]) #downloads-button:is([notification="finish"], [attention="success"]:not([progress])) #downloads-indicator-progress-outer {
+  animation: ghost-download-fold 700ms var(--ghost-ease) both;
+}
+/* The same six vertices begin as a flat strip and end as a check. Keeping
+   this on the real progress element avoids an empty frame between states. */
+@keyframes ghost-download-fold {
+  from, 15% {
+    --ghost-track-y: 12px;
+    --ghost-track-height: 3px;
+    clip-path: polygon(0 0, 50% 0, 100% 0, 100% 100%, 50% 100%, 0 100%);
+  }
+  to {
+    --ghost-track-y: -12px;
+    --ghost-track-height: 24px;
+    clip-path: polygon(10% 50%, 22% 38%, 42% 58%, 78% 22%, 90% 34%, 42% 82%);
+  }
+}
+@property --ghost-track-y {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 12px;
+}
+@property --ghost-track-height {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 3px;
+}
+:root:not([customizing]) #downloads-indicator-progress-inner {
+  width: 24px !important;
+  height: 3px !important;
+  border-radius: 0 !important;
+  mask: none !important;
+  background: linear-gradient(to right, var(--toolbarbutton-icon-fill-attention) var(--download-progress-pcent), transparent var(--download-progress-pcent)) !important;
+}
+:root:not([customizing]) #downloads-button:is([notification="finish"], [attention="success"]:not([progress])) #downloads-indicator-progress-inner {
+  opacity: 0;
+}
+:root:not([customizing]) #downloads-button > .toolbarbutton-badge-stack > .toolbarbutton-badge {
+  position: absolute !important;
+  top: 3px !important;
+  right: 3px !important;
+  margin: 0 !important;
 }
 @container ghost-navigation style(--ghost-content-opacity: 1) {
   :root:not([customizing]) #nav-bar-customization-target > #downloads-button {
@@ -659,6 +755,12 @@
   to { --ghost-download-glimpse-opacity: 0; --ghost-download-glimpse-visibility: hidden; --ghost-download-glimpse-pointer: none; }
 }
 @media (prefers-reduced-motion: reduce) {
+  :root:not([customizing]) #downloads-indicator-anchor::before,
+  :root:not([customizing]) #downloads-indicator-anchor::after,
+  :root:not([customizing]) #downloads-indicator-progress-outer {
+    animation: none !important;
+    transition: none !important;
+  }
   :root:not([customizing]) #nav-bar-customization-target > #downloads-button:is([progress], [attention="success"]):not([open="true"], :hover, :focus-visible) {
     opacity: max(var(--ghost-content-opacity), var(--ghost-download-glimpse-opacity)) !important;
     visibility: var(--ghost-download-glimpse-visibility, hidden) !important;

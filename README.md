@@ -33,7 +33,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 - Menus, extension popups, and active typing keep the toolbar available.
 - Moving away keeps all controls visible for **2 seconds**, then fades them together. Returning cancels closing. Submitting an address skips this wait and plays a short fade and collapse animation (about 0.3 seconds).
 - A native bookmarks menu button opens your saved sites. Sites from the old bookmarks bar are under **Bookmarks Toolbar** in that menu.
-- Downloads appear in a separate floating island with a native progress ring and completion animation. It appears briefly when a download starts, retracts while the download continues, and appears again on completion; hovering or opening its list keeps it available. Click the island to view files without revealing the address bar. Download warnings remain accessible.
+- Downloads appear in a separate floating island. An arrow settles into its tray above a thin progress track; on completion, the same track smoothly folds into a check as the arrow fades away. It appears briefly when a download starts, retracts while the download continues, and appears again on completion; hovering or opening its list keeps it available. Click the island to view files without revealing the address bar. Download warnings remain accessible; reduced motion uses a static completion check.
 - Native window buttons stay hidden until you hover over the top-right corner: a 16-pixel strip in a restored window, or 8 pixels when maximized. The larger restored-window strip extends below the native resize frame. They fade in independently of the toolbar, stay available while you use them, and hide after you leave. Hidden buttons pass clicks through to the page below the activation strip.
 - The sidebar expands on hover over the page, without shifting the page. While a side tool is open, tabs stay in a compact icon rail so its controls remain visible and stationary. Closing the tool restores normal hover expansion. Passive tab previews do not reveal the toolbar.
 - The hidden toolbar passes clicks through outside its visible center pill and 3-pixel top-edge activation strip. Window controls have a separate activation strip at the top right (16 pixels in a restored window, 8 when maximized).
@@ -113,7 +113,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.8
+./scripts/Build-Release.ps1 -Version 1.0.9
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.
