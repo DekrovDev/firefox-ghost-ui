@@ -126,7 +126,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.10
+./scripts/Build-Release.ps1 -Version 1.0.11
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.
@@ -135,12 +135,12 @@ The browser behavior was also checked with real mouse/keyboard actions on Firefo
 
 The download-island changes in **1.0.9** were additionally checked on **Firefox 157.0.1 for Windows**: real downloads, brief start/finish notices, file-list clicks, safety badges, reduced motion and alignment at 100%, 125% and 150% scaling. These are targeted download checks; the earlier full-interface checks above used 156.0.1.
 
-**1.0.10** keeps native menu anchors stationary during toolbar animations. Native toolbar checks on **Firefox 158.0 for Windows** use a disposable headless profile:
+**1.0.11** keeps native menu anchors stationary and places the glass surface behind the controls. It fixes a regression in 1.0.10 where that surface intercepted toolbar clicks. Native toolbar checks on **Firefox 158.0 for Windows** use a disposable headless profile:
 
 ```powershell
 python ./tests/Toolbar.Tests.py --firefox 'C:/Program Files/Mozilla Firefox/firefox.exe'
 ```
 
-They check menu and extension popup opening, holding and reopening, extension actions, menu subviews, the actual extensions-manager and settings tabs, navigation, keyboard address focus, find in page, smaller windows and hidden-toolbar click-through. Actual downloads were also checked with normal and reduced motion. These checks do not cover personal extension configuration, account sign-in or operating-system dialogs. The reported instant disappearance after selecting Extensions in the menu was not reproduced in this isolated profile; the release addresses the independently confirmed moving-anchor defect.
+Toolbar clicks now verify the topmost hit target and use pointer coordinates. The earlier direct element-click checks missed the glass interception. Native XUL popup items use element clicks because their separate widget is not returned by the main document's headless hit test. The tests check menu and extension popup opening, holding and reopening, extension actions, menu subviews, the actual extensions-manager and settings tabs, navigation, keyboard address focus, find in page, smaller windows and hidden-toolbar click-through. Actual downloads were also checked with normal and reduced motion. These checks do not cover personal extension configuration, account sign-in or operating-system dialogs. The earlier reported instant disappearance after selecting Extensions in the menu was not reproduced in this isolated profile; the later blocked-toolbar regression was reproduced and fixed.
 
 MIT license. Firefox, Bonjourr, and the linked extensions are separate projects; this is an independent customization.

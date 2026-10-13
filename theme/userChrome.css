@@ -259,6 +259,9 @@
 :root[windowtype="navigator:browser"] #nav-bar::before {
   content: "";
   position: absolute;
+  /* The glass stays behind native controls even when their artwork animates
+     without creating a transformed stacking context on the button itself. */
+  z-index: -1;
   top: 0;
   left: 0;
   right: 0;

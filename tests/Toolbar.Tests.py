@@ -36,6 +36,9 @@ class Firefox:
             "browser.startup.homepage_override.mstone": "ignore",
             "browser.download.alwaysOpenPanel": False,
             "browser.download.panel.shown": True,
+            # The fresh profile has no download history. Make the native
+            # button visible for its coordinate-click check.
+            "browser.download.autohideButton": False,
         }
         (profile / "user.js").write_text("\n".join(
             f"user_pref({json.dumps(k)}, {json.dumps(v)});" for k, v in prefs.items()
@@ -107,8 +110,22 @@ class Firefox:
         }]})
 
     def click(self, selector):
-        element = self.command("WebDriver:FindElement", {"using": "css selector", "value": selector})
-        self.command("WebDriver:ElementClick", {"id": next(iter(element.values()))})
+        point = self.js("const e=document.querySelector(arguments[0]);if(!e)throw Error('Missing '+arguments[0]);"
+                        "const r=e.getBoundingClientRect(),x=Math.round(r.x+r.width/2),y=Math.round(r.y+r.height/2);"
+                        "const hit=document.elementFromPoint(x,y);return {x,y,popup:!!e.closest('panel,menupopup'),"
+                        "reachable:hit===e||e.contains(hit),hit:hit?.id||hit?.localName};", [selector])
+        if point["popup"]:
+            # XUL popups have a separate native widget and are not returned by
+            # the main document's elementFromPoint in headless Firefox.
+            element = self.command("WebDriver:FindElement", {"using": "css selector", "value": selector})
+            self.command("WebDriver:ElementClick", {"id": next(iter(element.values()))})
+            return
+        assert point["reachable"], f"Pointer intercepted at {selector} by {point['hit']}"
+        self.command("WebDriver:PerformActions", {"actions": [{
+            "type": "pointer", "id": "audit-mouse", "parameters": {"pointerType": "mouse"},
+            "actions": [{"type": "pointerMove", "origin": "viewport", "x": point["x"], "y": point["y"]},
+                        {"type": "pointerDown", "button": 0}, {"type": "pointerUp", "button": 0}],
+        }]})
 
     def keys(self, actions):
         self.command("WebDriver:PerformActions", {"actions": [
