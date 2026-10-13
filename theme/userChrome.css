@@ -84,7 +84,9 @@
   --ghost-url-delay: var(--ghost-close-wait);
   --ghost-edit-session: 0;
   container-name: ghost-navigation;
-  transition: --ghost-edit-session 1ms step-end 2000ms;
+  /* Firefox's author-sheet background transition would otherwise override
+     this user-sheet transition and erase the submission marker instantly. */
+  transition: --ghost-edit-session 1ms step-end 2000ms !important;
 }
 
 :root[windowtype="navigator:browser"] #navigator-toolbox:is(
@@ -93,7 +95,7 @@
   :has(#urlbar[breakout-extend][focused])
 ) {
   --ghost-edit-session: 1 !important;
-  transition-delay: 0ms;
+  transition-delay: 0ms !important;
 }
 @property --ghost-submit-opacity {
   syntax: "<number>";
@@ -104,23 +106,23 @@
 /* Replace the queued hover transition with a short submission animation.
    Firefox computes transition delays before inherited property animations. */
 @container ghost-navigation style(--ghost-edit-session: 1) {
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
+  :root:not([customizing], [inFullscreen]):not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #nav-bar::before,
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
+  :root:not([customizing], [inFullscreen]):not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused])))
   :is(#nav-bar, #urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container, #downloads-button), #PanelUI-button, #nav-bar-overflow-button) {
     transition: none !important;
   }
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
+  :root:not([customizing], [inFullscreen]):not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #nav-bar::before {
     animation: ghost-submit-shell var(--ghost-submit-shell-time) ease-in-out both !important;
   }
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
+  :root:not([customizing], [inFullscreen]):not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused]))) #urlbar {
     opacity: var(--ghost-submit-opacity) !important;
     animation: ghost-submit-fade var(--ghost-submit-fade-time) ease-out both !important;
   }
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
+  :root:not([customizing], [inFullscreen]):not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused])))
   :is(#nav-bar-customization-target > :not(#urlbar-container, #downloads-button), #PanelUI-button, #nav-bar-overflow-button) {
     opacity: var(--ghost-submit-opacity) !important;
@@ -169,7 +171,7 @@
 :root[windowtype="navigator:browser"]
 #navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover, #downloads-button:hover)) {
   --ghost-edit-session: 0;
-  transition-delay: 0ms;
+  transition-delay: 0ms !important;
   --ghost-shell-width: 100%;
   --ghost-shell-height: var(--ghost-bar-height);
   --ghost-shell-radius: var(--ghost-radius);
@@ -320,7 +322,8 @@
 }
 
 :root[windowtype="navigator:browser"] #urlbar-container {
-  min-width: 0 !important;
+  /* Keep typing usable; let Firefox overflow removable toolbar widgets first. */
+  min-width: 120px !important;
   flex: 1 1 auto !important;
   transform: none !important;
   pointer-events: var(--ghost-content-pointer) !important;
@@ -572,7 +575,7 @@
   initial-value: 0px;
 }
 @container ghost-navigation style(--ghost-edit-session: 1) {
-  :root:not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
+  :root:not([customizing], [inFullscreen]):not(:has(:is(:is(panel, menupopup)[panelopen="true"]:not([role="tooltip"], #downloadsPanel, #downloadsContextMenu), menupopup[open="true"]:not(#downloadsContextMenu))))
   #navigator-toolbox:not(:hover):not(:has(#urlbar:is([usertyping][focused], [open], [breakout-extend][focused])))
   #downloads-button:not(:is([progress], [notification], [open="true"], [attention="info"], [attention="warning"], [attention="severe"])) {
     transition: none !important;

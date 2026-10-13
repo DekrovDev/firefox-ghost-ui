@@ -126,7 +126,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.11
+./scripts/Build-Release.ps1 -Version 1.0.12
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.
@@ -144,3 +144,5 @@ python ./tests/Toolbar.Tests.py --firefox 'C:/Program Files/Mozilla Firefox/fire
 Toolbar clicks now verify the topmost hit target and use pointer coordinates. The earlier direct element-click checks missed the glass interception. Native XUL popup items use element clicks because their separate widget is not returned by the main document's headless hit test. The tests check menu and extension popup opening, holding and reopening, extension actions, menu subviews, the actual extensions-manager and settings tabs, navigation, keyboard address focus, find in page, smaller windows and hidden-toolbar click-through. Actual downloads were also checked with normal and reduced motion. These checks do not cover personal extension configuration, account sign-in or operating-system dialogs. The earlier reported instant disappearance after selecting Extensions in the menu was not reproduced in this isolated profile; the later blocked-toolbar regression was reproduced and fixed.
 
 MIT license. Firefox, Bonjourr, and the linked extensions are separate projects; this is an independent customization.
+
+**1.0.12** restores the short animated collapse after submitting an address: Firefox's native transition previously overrode the submission marker. The usual two-second hover grace remains. The address field now keeps at least 120 pixels in a narrow window, letting Firefox move optional buttons into its overflow menu. Submission animations are disabled during toolbar customization and fullscreen. The expanded suite passes 67 checks, including real local-page submission, visible fade frames, reduced motion, immediate customization, narrow windows, side-tool hit targets and native fullscreen. An additional 85 coordinate clicks passed through the hidden toolbar, and the overflow menu was opened by a coordinate click in a narrow window.

@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 import time
 import zipfile
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -223,6 +225,63 @@ def run(f, folder):
     f.js("gURLBar.view.close();gURLBar.blur();gBrowser.selectedBrowser.focus();return true;")
     print("PASS: keyboard address focus / Escape", flush=True)
 
+    class LocalPage(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            body = b"<title>Local submission</title><h1>Submission test</h1>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), LocalPage)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        for reduced in [False, True]:
+            f.js("Services.prefs.setIntPref('ui.prefersReducedMotion',arguments[0]);return true;", [int(reduced)])
+            f.move(400, 600)
+            f.keys([{"type": "keyDown", "value": "\ue009"}, {"type": "keyDown", "value": "l"},
+                    {"type": "keyUp", "value": "l"}, {"type": "keyUp", "value": "\ue009"}])
+            address = f"http://127.0.0.1:{server.server_port}/?reduced={int(reduced)}"
+            f.keys([action for char in address for action in
+                    [{"type": "keyDown", "value": char}, {"type": "keyUp", "value": char}]])
+            time.sleep(.35)
+            f.keys([{"type": "keyDown", "value": "\ue007"}, {"type": "keyUp", "value": "\ue007"}])
+            frames = []
+            end = time.monotonic() + .6
+            while time.monotonic() < end:
+                frames.append(f.js("return {opacity:parseFloat(getComputedStyle(gURLBar).opacity),"
+                                   "width:parseFloat(getComputedStyle(document.getElementById('nav-bar'),'::before').width)};"))
+                time.sleep(.025)
+            if not reduced:
+                check(any(.01 < frame["opacity"] < .99 for frame in frames), "Missing smooth Enter fade")
+                check(any(130 < frame["width"] < 1100 for frame in frames), "Missing Enter shell collapse")
+            check(frames[-1]["opacity"] == 0 and abs(frames[-1]["width"] - 128) < 1,
+                  f"Enter waited for hover grace, reduced={reduced}: {frames}")
+            check(f.js("return !document.elementFromPoint(150,30)?.closest('#nav-bar');"),
+                  "Submitted toolbar intercepts page clicks")
+    finally:
+        server.shutdown()
+        server.server_close()
+        f.js("Services.prefs.clearUserPref('ui.prefersReducedMotion');return true;")
+    print("PASS: real Enter navigation / smooth fade / reduced motion / click-through", flush=True)
+
+    f.keys([{"type": "keyDown", "value": "\ue009"}, {"type": "keyDown", "value": "l"},
+            {"type": "keyUp", "value": "l"}, {"type": "keyUp", "value": "\ue009"}])
+    f.js("gCustomizeMode.enter();return true;")
+    f.wait("return document.documentElement.hasAttribute('customizing');")
+    time.sleep(.4)
+    check(f.js("return getComputedStyle(gURLBar).opacity==='1'&&"
+               "[...document.querySelector('#nav-bar-customization-target').children]"
+               ".filter(e=>e.getBoundingClientRect().width>0).every(e=>getComputedStyle(e).opacity==='1');"),
+          "Recent editing hides draggable controls in customization")
+    f.js("gCustomizeMode.exit();return true;")
+    f.wait("return !document.documentElement.hasAttribute('customizing');")
+    print("PASS: customization immediately after address editing", flush=True)
+
     # Open, hold after leaving the toolbar, dismiss and reopen all primary panels.
     for selector, panel in [
         ("#PanelUI-menu-button", "appMenu-popup"),
@@ -323,16 +382,39 @@ def run(f, folder):
           "Find in page did not open")
     f.js("gBrowser.selectedTab._findBar.close();return true;")
 
-    for width in [900, 1440]:
+    for width in [600, 900, 1440]:
         f.dismiss()
         f.command("WebDriver:SetWindowRect", {"width": width, "height": 1000})
-        f.reveal()
+        f.move(100, 2)
+        time.sleep(.7)
+        check(f.js("return document.getElementById('urlbar-container').getBoundingClientRect().width>=120;"),
+              f"Address field too narrow at requested width {width}")
         f.click("#PanelUI-menu-button")
         f.wait("return document.getElementById('appMenu-popup').state==='open';")
         box = f.js("return document.getElementById('appMenu-popup').getBoundingClientRect().toJSON();")
-        check(box["x"] >= 0 and box["right"] <= width + 1 and box["y"] >= 0,
+        actual_width = f.js("return innerWidth;")
+        check(box["x"] >= 0 and box["right"] <= actual_width + 1 and box["y"] >= 0,
               f"Menu outside window at {width}: {box}")
     print("PASS: find bar / smaller window menu", flush=True)
+
+    f.dismiss()
+    f.js("SidebarController.show('viewCustomizeSidebar');return true;")
+    f.wait("return document.getElementById('sidebar-container').hasAttribute('sidebar-panel-open');")
+    f.move(25, 400)
+    time.sleep(.7)
+    check(f.js("return document.getElementById('sidebar-container').getBoundingClientRect().width===50;"),
+          "Expanded rail covers the side tool")
+    check(f.js("const r=document.getElementById('sidebar-box').getBoundingClientRect();"
+               "return !!document.elementFromPoint(r.x+24,r.y+100)?.closest('#sidebar-box');"),
+          "Side tool controls are covered")
+    f.js("SidebarController.hide();BrowserCommands.fullScreen();return true;")
+    f.wait("return document.documentElement.hasAttribute('inFullscreen');")
+    check(f.js("return getComputedStyle(document.getElementById('nav-bar')).display==='none'"
+               "&&getComputedStyle(document.getElementById('sidebar-container')).display==='none';"),
+          "Floating controls remain in native fullscreen")
+    f.js("BrowserCommands.fullScreen();return true;")
+    f.wait("return !document.documentElement.hasAttribute('inFullscreen');")
+    print("PASS: side tool hit target / native fullscreen hide and restore", flush=True)
 
     f.dismiss()
     f.reveal()
