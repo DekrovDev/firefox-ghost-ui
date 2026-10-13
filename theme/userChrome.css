@@ -223,7 +223,9 @@
   --ghost-content-offset: 0px !important;
   --ghost-content-scale: 1 !important;
   --ghost-content-base-delay: 0ms !important;
-  --ghost-wave-step: var(--ghost-icon-stagger) !important;
+  /* Native popups require a visible anchor immediately, including while a
+     queued close transition is being cancelled. Do not stagger this state. */
+  --ghost-wave-step: 0ms !important;
   --ghost-content-time: 220ms !important;
   --ghost-url-delay: 0ms !important;
 }
@@ -338,12 +340,12 @@
   opacity: var(--ghost-content-opacity) !important;
   visibility: var(--ghost-content-visibility) !important;
   pointer-events: var(--ghost-content-pointer) !important;
-  translate: calc(var(--ghost-fold-x) * (1 - var(--ghost-content-opacity))) var(--ghost-content-offset) !important;
-  scale: var(--ghost-content-scale) !important;
+  /* Keep native hit targets and popup anchors stationary. Transforming the
+     toolbaritem also transforms its native menu; animate only its artwork. */
+  translate: none !important;
+  scale: none !important;
   transition:
     opacity var(--ghost-content-time) ease var(--ghost-content-delay),
-    translate 360ms var(--ghost-ease) var(--ghost-content-delay),
-    scale 360ms var(--ghost-icon-ease) var(--ghost-content-delay),
     visibility 1ms step-end calc(var(--ghost-content-delay) + var(--ghost-visibility-extra)) allow-discrete,
     pointer-events 1ms step-end var(--ghost-content-delay) allow-discrete !important;
 }
@@ -375,11 +377,16 @@
   transition: background-color 420ms ease, border-color 200ms ease !important;
 }
 
-:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1 > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
-  transition: scale 140ms var(--ghost-ease), background-color 140ms ease !important;
+:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:not(#downloads-button) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  translate: calc(var(--ghost-fold-x, 0px) * (1 - var(--ghost-content-opacity))) var(--ghost-content-offset) !important;
+  scale: var(--ghost-content-scale) !important;
+  transition:
+    translate 360ms var(--ghost-ease) var(--ghost-content-delay, 0ms),
+    scale 180ms var(--ghost-icon-ease) var(--ghost-content-delay, 0ms),
+    background-color 140ms ease !important;
 }
-:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) { scale: 1.075; }
-:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:active > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) { scale: .93; }
+:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:not(#downloads-button):hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) { scale: 1.075 !important; }
+:root[windowtype="navigator:browser"] #nav-bar .toolbarbutton-1:not(#downloads-button):active > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) { scale: .93 !important; }
 
 /* A separate native download island. The button retains Firefox's progress,
    completion animation, tooltip, keyboard command and download safety badges.
@@ -733,6 +740,9 @@
   :root[windowtype="navigator:browser"][customtitlebar]:not([inFullscreen], [customizing]) #toolbar-menubar > .titlebar-buttonbox-container > .titlebar-buttonbox { transition-duration: 1ms !important; }
   :root:not([customizing]) #nav-bar-customization-target > #downloads-button { transition-duration: 1ms !important; }
   :root :is(#urlbar, #urlbar-container, #nav-bar-customization-target > :not(#urlbar-container, #downloads-button), #PanelUI-button, #nav-bar-overflow-button) {
+    transition-duration: 1ms !important;
+  }
+  :root #nav-bar .toolbarbutton-1:not(#downloads-button) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
     transition-duration: 1ms !important;
   }
 }

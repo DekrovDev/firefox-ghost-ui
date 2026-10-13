@@ -30,7 +30,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 - Hover anywhere along the usable top edge, or over the visible center pill. Opening starts after **120 ms** and the controls appear within about half a second.
 - **Ctrl+L** opens the address bar immediately.
 - After you submit a search, the toolbar collapses when editing ends and suggestions close. A saved query no longer keeps it open.
-- Menus, extension popups, and active typing keep the toolbar available.
+- Menus, extension popups, and active typing keep the toolbar available. Button hit areas and popup anchors stay stationary during animations; only their artwork moves. Opening a popup cancels the icon stagger immediately.
 - Moving away keeps all controls visible for **2 seconds**, then fades them together. Returning cancels closing. Submitting an address skips this wait and plays a short fade and collapse animation (about 0.3 seconds).
 - A native bookmarks menu button opens your saved sites. Sites from the old bookmarks bar are under **Bookmarks Toolbar** in that menu.
 - Downloads appear in a separate floating island. An arrow settles into its tray above a thin progress track; on completion, the same track smoothly folds into a check as the arrow fades away. It appears briefly when a download starts, retracts while the download continues, and appears again on completion; hovering or opening its list keeps it available. Click the island to view files without revealing the address bar. Download warnings remain accessible; reduced motion uses a static completion check.
@@ -51,7 +51,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 
 No administrator access, Git, Python, or additional PowerShell modules are needed. The installer uses Windows PowerShell 5.1 already included with Windows. It operates locally and saves backups before writing files. The CMD launcher permits this script for its own process only; it does not change the machine's execution policy.
 
-**Compatibility:** designed and visually tested on Firefox **156.0.1 for Windows**. Installer checks run on Windows PowerShell 5.1 and PowerShell 7. Other Firefox versions and operating systems have not been verified.
+**Compatibility:** the original visual checks used Firefox **156.0.1 for Windows**. Targeted download checks used 157.0.1; native toolbar regression checks use 158.0, as described below. Installer checks run on Windows PowerShell 5.1 and PowerShell 7. Other operating systems have not been verified.
 
 ## Extensions and the complete look
 
@@ -126,7 +126,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.9
+./scripts/Build-Release.ps1 -Version 1.0.10
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.
@@ -134,5 +134,13 @@ The tests use disposable profiles only and cover first install, updates, existin
 The browser behavior was also checked with real mouse/keyboard actions on Firefox 156.0.1: Ctrl+L, Enter, menus, extension popups, sidebar overlay, adaptive colors, fullscreen, customization, reduced motion, and native window commands at multiple window sizes.
 
 The download-island changes in **1.0.9** were additionally checked on **Firefox 157.0.1 for Windows**: real downloads, brief start/finish notices, file-list clicks, safety badges, reduced motion and alignment at 100%, 125% and 150% scaling. These are targeted download checks; the earlier full-interface checks above used 156.0.1.
+
+**1.0.10** keeps native menu anchors stationary during toolbar animations. Native toolbar checks on **Firefox 158.0 for Windows** use a disposable headless profile:
+
+```powershell
+python ./tests/Toolbar.Tests.py --firefox 'C:/Program Files/Mozilla Firefox/firefox.exe'
+```
+
+They check menu and extension popup opening, holding and reopening, extension actions, menu subviews, the actual extensions-manager and settings tabs, navigation, keyboard address focus, find in page, smaller windows and hidden-toolbar click-through. Actual downloads were also checked with normal and reduced motion. These checks do not cover personal extension configuration, account sign-in or operating-system dialogs. The reported instant disappearance after selecting Extensions in the menu was not reproduced in this isolated profile; the release addresses the independently confirmed moving-anchor defect.
 
 MIT license. Firefox, Bonjourr, and the linked extensions are separate projects; this is an independent customization.
