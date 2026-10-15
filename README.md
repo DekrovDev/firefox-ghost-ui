@@ -28,6 +28,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 ## Features
 
 - Hover anywhere along the usable top edge, or over the visible center pill. Opening starts after **120 ms** and the controls appear within about half a second.
+- Briefly crossing the edge on the way to a page header does not enable an invisible toolbar. After deliberate hovering, a growing hit area follows the visible glass so you can move into it while it opens. Controls become clickable as they appear; the full toolbar area activates after opening completes. The activation strip and center pill keep their size.
 - **Ctrl+L** opens the address bar immediately.
 - After you submit a search, the toolbar collapses when editing ends and suggestions close. A saved query no longer keeps it open.
 - Menus, extension popups, and active typing keep the toolbar available. Button hit areas and popup anchors stay stationary during animations; only their artwork moves. Opening a popup cancels the icon stagger immediately.
@@ -126,7 +127,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.12
+./scripts/Build-Release.ps1 -Version 1.0.13
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.
@@ -146,3 +147,5 @@ Toolbar clicks now verify the topmost hit target and use pointer coordinates. Th
 MIT license. Firefox, Bonjourr, and the linked extensions are separate projects; this is an independent customization.
 
 **1.0.12** restores the short animated collapse after submitting an address: Firefox's native transition previously overrode the submission marker. The usual two-second hover grace remains. The address field now keeps at least 120 pixels in a narrow window, letting Firefox move optional buttons into its overflow menu. Submission animations are disabled during toolbar customization and fullscreen. The expanded suite passes 67 checks, including real local-page submission, visible fade frames, reduced motion, immediate customization, narrow windows, side-tool hit targets and native fullscreen. An additional 85 coordinate clicks passed through the hidden toolbar, and the overflow menu was opened by a coordinate click in a narrow window.
+
+**1.0.13** fixes page-header clicks blocked after briefly touching the top edge. Static checks in 1.0.12 missed this trajectory: the invisible nav rectangle became clickable immediately and sustained its own hover. Opening now confirms hover intent, bridges into the visible glass and delays full-area interaction. The suite passes 96 checks, adding coordinate clicks on four page-header controls after 10 ms and 50 ms edge crossings, cancellation, early entry into the growing shell and activation through the unchanged pill. These run in the same disposable headless Firefox; they do not simulate the user's personal session.

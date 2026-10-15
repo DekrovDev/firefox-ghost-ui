@@ -13,6 +13,7 @@ import tempfile
 import time
 import zipfile
 import threading
+from urllib.parse import quote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -129,6 +130,17 @@ class Firefox:
                         {"type": "pointerDown", "button": 0}, {"type": "pointerUp", "button": 0}],
         }]})
 
+    def edge_cross_click(self, dwell, x, y):
+        # Keep the dwell inside a single native action sequence: separate RPCs
+        # can accidentally push a 50 ms experiment past the 120 ms intent gate.
+        self.command("WebDriver:PerformActions", {"actions": [{
+            "type": "pointer", "id": "audit-mouse", "parameters": {"pointerType": "mouse"},
+            "actions": [{"type": "pointerMove", "origin": "viewport", "x": 200, "y": 2},
+                        {"type": "pause", "duration": round(dwell * 1000)},
+                        {"type": "pointerMove", "origin": "viewport", "x": x, "y": y},
+                        {"type": "pointerDown", "button": 0}, {"type": "pointerUp", "button": 0}],
+        }]})
+
     def keys(self, actions):
         self.command("WebDriver:PerformActions", {"actions": [
             {"type": "key", "id": "audit-keyboard", "actions": actions}
@@ -202,6 +214,79 @@ def run(f, folder):
          "CustomizableUI.addWidgetToArea(id,CustomizableUI.AREA_NAVBAR);return true;")
     time.sleep(.6)
     print("Firefox", f.js("return Services.appinfo.version;"), flush=True)
+
+    # Reproduce crossing the edge on the way to a website's header. An idle
+    # hit test misses the old bug: hover made the invisible nav rectangle
+    # clickable immediately, and that rectangle then sustained its own hover.
+    page = """<!doctype html><title>Header trajectory</title>
+    <style>body{margin:0}button{position:fixed;top:20px;height:32px}
+    #menu{left:20px;width:48px}#logo{left:100px;width:110px}
+    #search{left:40%;width:140px}#create{right:152px;width:64px}</style>
+    <button id=menu>Menu</button><button id=logo>Logo</button>
+    <button id=search>Search</button><button id=create>Create</button>
+    <script>document.addEventListener('click',e=>{
+    if(e.target.tagName==='BUTTON')document.documentElement.dataset.lastClick=e.target.id})</script>"""
+    f.command("Marionette:SetContext", {"value": "content"})
+    f.command("WebDriver:Navigate", {"url": "data:text/html," + quote(page)})
+    points = f.js("return [...document.querySelectorAll('button')].map(e=>{"
+                  "const r=e.getBoundingClientRect();return {id:e.id,x:r.x+r.width/2,y:r.y+r.height/2}});")
+    f.command("Marionette:SetContext", {"value": "chrome"})
+    origin = f.js("const r=gBrowser.selectedBrowser.getBoundingClientRect();return {x:r.x,y:r.y};")
+    for dwell in [.01, .05]:
+        for point in points:
+            f.dismiss()
+            time.sleep(2.65)
+            # The rightmost page control sits under the independent download
+            # island. Use the same central edge sensor for all trajectories.
+            x, y = round(origin["x"] + point["x"]), round(origin["y"] + point["y"])
+            f.edge_cross_click(dwell, x, y)
+            f.command("Marionette:SetContext", {"value": "content"})
+            try:
+                received = f.js("return document.documentElement.dataset.lastClick===arguments[0];", [point["id"]])
+                f.js("delete document.documentElement.dataset.lastClick;return true;")
+            finally:
+                f.command("Marionette:SetContext", {"value": "chrome"})
+            if not received:
+                detail = f.js("const d=document.getElementById('downloads-button'),s=getComputedStyle(d);"
+                              "return {hit:document.elementFromPoint(arguments[0],arguments[1])?.id,"
+                              "url:getComputedStyle(gURLBar).opacity,download:{opacity:s.opacity,visibility:s.visibility,"
+                              "pointer:s.pointerEvents,delay:s.transitionDelay,hover:d.matches(':hover')},"
+                              "hover:document.getElementById('navigator-toolbox').matches(':hover')};", [x, y])
+                raise AssertionError(f"Header click blocked after {dwell}s edge crossing: {point['id']}: {detail}")
+            check(received, f"Page header click: {point['id']}")
+            check(f.js("return !document.getElementById('navigator-toolbox').matches(':hover');"),
+                  f"Invisible toolbar sustains hover over page {point['id']}")
+            time.sleep(.4)
+            check(f.js("return getComputedStyle(gURLBar).opacity==='0';"),
+                  f"Cancelled edge crossing later reveals toolbar over {point['id']}")
+    f.dismiss()
+    time.sleep(2.65)
+    f.move(200, 2)
+    time.sleep(.2)
+    middle = f.js("const r=document.getElementById('nav-bar').getBoundingClientRect();"
+                  "return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)};")
+    f.move(middle["x"], middle["y"])
+    check(f.js("return document.getElementById('navigator-toolbox').matches(':hover')&&"
+               "getComputedStyle(document.getElementById('nav-bar'),'::before').pointerEvents==='auto';"),
+          "Moving into the visible glass during opening cancels deliberate hover")
+    time.sleep(.55)
+    check(f.js("return getComputedStyle(gURLBar).opacity==='1';"),
+          "Early entry into the visible shell fails to finish opening")
+    f.dismiss()
+    time.sleep(2.65)
+    sensor = f.js("const s=getComputedStyle(document.getElementById('nav-bar'),'::after');"
+                  "const r=document.getElementById('nav-bar').getBoundingClientRect();"
+                  "return {width:parseFloat(s.width),height:parseFloat(s.height),x:Math.round(r.x+r.width/2),y:Math.round(r.y+6)};")
+    check(sensor["width"] == 128 and sensor["height"] == 12, "Pill activation area changed")
+    f.move(sensor["x"], sensor["y"])
+    time.sleep(.75)
+    check(f.js("return getComputedStyle(gURLBar).opacity==='1'&&"
+               "getComputedStyle(document.getElementById('nav-bar')).pointerEvents==='auto';"),
+          "Deliberate pill hover fails to open the toolbar")
+    f.click("#PanelUI-menu-button")
+    check(f.wait("return document.getElementById('appMenu-popup').state==='open';"),
+          "Toolbar opened by pill is not interactive")
+    print("PASS: page header clicks after edge crossings / growing bridge / fixed pill sensor", flush=True)
 
     # Stable native anchor boxes are essential during the reveal, not only afterwards.
     f.dismiss()

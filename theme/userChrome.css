@@ -64,7 +64,7 @@
   --ghost-shell-height: var(--ghost-island-height);
   --ghost-shell-radius: 999px;
   --ghost-shell-opacity: .38;
-  --ghost-shell-pointer: auto;
+  --ghost-shell-pointer: none;
   --ghost-nav-pointer: none;
   --ghost-nav-delay: var(--ghost-close-wait);
   --ghost-shell-border: transparent;
@@ -77,6 +77,8 @@
   --ghost-content-pointer: none;
   --ghost-content-offset: -5px;
   --ghost-content-scale: .8;
+  --ghost-hover-hit-wait: 0ms;
+  --ghost-download-intent-delay: 0ms;
   --ghost-content-base-delay: var(--ghost-close-wait);
   --ghost-wave-step: 0ms;
   --ghost-visibility-extra: var(--ghost-content-time);
@@ -167,7 +169,11 @@
   z-index: 102;
 }
 
-/* Hover opens after the wait. Window buttons do not trigger the toolbar. */
+/* Three phases: confirm edge intent, reveal artwork, then enable hit targets.
+   A brief crossing must cancel the queued none -> auto transition. Enabling
+   the nav rectangle immediately lets an invisible box sustain its own hover
+   above page headers. Only the completed reveal enables that broad box.
+   Keyboard focus and open menus below bypass this hover-only gate. */
 :root[windowtype="navigator:browser"]
 #navigator-toolbox:hover:not(:has(#toolbar-menubar .titlebar-buttonbox-container:hover, #downloads-button:hover)) {
   --ghost-edit-session: 0;
@@ -178,7 +184,7 @@
   --ghost-shell-opacity: 1;
   --ghost-shell-pointer: auto;
   --ghost-nav-pointer: auto;
-  --ghost-nav-delay: 0ms;
+  --ghost-nav-delay: calc(var(--ghost-open-wait) + var(--ghost-open-time));
   --ghost-visibility-extra: 0ms;
   --ghost-shell-border: var(--ghost-border);
   --ghost-shell-shadow: var(--ghost-shadow);
@@ -190,6 +196,8 @@
   --ghost-content-pointer: auto;
   --ghost-content-offset: 0px;
   --ghost-content-scale: 1;
+  --ghost-hover-hit-wait: 90ms;
+  --ghost-download-intent-delay: var(--ghost-open-wait);
   --ghost-content-base-delay: calc(var(--ghost-open-wait) + 80ms);
   --ghost-wave-step: var(--ghost-icon-stagger);
   --ghost-content-time: 180ms;
@@ -224,6 +232,8 @@
   --ghost-content-pointer: auto !important;
   --ghost-content-offset: 0px !important;
   --ghost-content-scale: 1 !important;
+  --ghost-hover-hit-wait: 0ms !important;
+  --ghost-download-intent-delay: 0ms !important;
   --ghost-content-base-delay: 0ms !important;
   /* Native popups require a visible anchor immediately, including while a
      queued close transition is being cancelled. Do not stagger this state. */
@@ -258,6 +268,9 @@
   z-index: 101 !important;
 }
 
+/* After intent is confirmed, the visible glass provides a growing bridge
+   from the edge to the controls. Its hit area follows the drawn dimensions;
+   the full native nav rectangle is still gated until opening completes. */
 :root[windowtype="navigator:browser"] #nav-bar::before {
   content: "";
   position: absolute;
@@ -279,6 +292,7 @@
   opacity: var(--ghost-shell-opacity);
   pointer-events: var(--ghost-shell-pointer);
   transition:
+    pointer-events 1ms step-end var(--ghost-shell-delay) allow-discrete,
     width var(--ghost-shell-time) var(--ghost-ease) var(--ghost-shell-delay),
     height var(--ghost-shell-time) var(--ghost-ease) var(--ghost-shell-delay),
     border-radius var(--ghost-shell-time) var(--ghost-ease) var(--ghost-shell-delay),
@@ -288,18 +302,22 @@
     opacity 180ms ease var(--ghost-shell-fade-delay);
 }
 
+/* Fixed-size intent sensor: it follows neither the expanding glass nor the
+   charge artwork. Keep the pill and the broad top-edge strip easy to reach. */
 :root[windowtype="navigator:browser"] #nav-bar::after {
   content: "";
   position: absolute;
-  top: 1px;
+  top: 0;
   left: 0;
   right: 0;
-  width: calc(var(--ghost-island-width) - 4px);
-  height: calc(var(--ghost-island-height) - 2px);
+  width: var(--ghost-island-width);
+  height: var(--ghost-island-height);
   margin-inline: auto;
   border-radius: 999px;
-  pointer-events: none;
+  pointer-events: auto;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--toolbar-text-color, var(--toolbar-color, #fff)) 45%, transparent), transparent);
+  background-repeat: no-repeat;
+  background-position: center;
   opacity: 0;
 }
 
@@ -309,12 +327,14 @@
 }
 
 @keyframes ghost-charge {
-  0% { opacity: .1; scale: .2 1; }
-  90% { opacity: .6; scale: 1 1; }
-  100% { opacity: 0; scale: 1 1; }
+  0% { opacity: .1; background-size: 20% 100%; }
+  90% { opacity: .6; background-size: 100% 100%; }
+  100% { opacity: 0; background-size: 100% 100%; }
 }
 
-/* Pointer transitions prevent transparent controls intercepting page clicks. */
+/* Controls become interactive after their fade has visibly begun. Native
+   anchor geometry stays fixed. Invisible controls never acquire a hit area;
+   completed controls retain the ordinary close grace when the mouse leaves. */
 :root[windowtype="navigator:browser"] #nav-bar-customization-target {
   min-width: 0 !important;
   flex: 1 1 0% !important;
@@ -327,7 +347,7 @@
   flex: 1 1 auto !important;
   transform: none !important;
   pointer-events: var(--ghost-content-pointer) !important;
-  transition: pointer-events 1ms step-end var(--ghost-url-delay) allow-discrete !important;
+  transition: pointer-events 1ms step-end calc(var(--ghost-url-delay) + var(--ghost-hover-hit-wait)) allow-discrete !important;
 }
 
 :root[windowtype="navigator:browser"] #urlbar {
@@ -335,7 +355,7 @@
   pointer-events: var(--ghost-content-pointer) !important;
   transition:
     opacity 260ms ease var(--ghost-url-delay),
-    pointer-events 1ms step-end var(--ghost-url-delay) allow-discrete !important;
+    pointer-events 1ms step-end calc(var(--ghost-url-delay) + var(--ghost-hover-hit-wait)) allow-discrete !important;
 }
 
 :root[windowtype="navigator:browser"]
@@ -353,7 +373,7 @@
   transition:
     opacity var(--ghost-content-time) ease var(--ghost-content-delay),
     visibility 1ms step-end calc(var(--ghost-content-delay) + var(--ghost-visibility-extra)) allow-discrete,
-    pointer-events 1ms step-end var(--ghost-content-delay) allow-discrete !important;
+    pointer-events 1ms step-end calc(var(--ghost-content-delay) + var(--ghost-hover-hit-wait)) allow-discrete !important;
 }
 
 /* Count outward from the address field; pinned extensions join automatically. */
@@ -566,7 +586,13 @@
 }
 @container ghost-navigation style(--ghost-content-opacity: 1) {
   :root:not([customizing]) #nav-bar-customization-target > #downloads-button {
-    transition-delay: 0ms !important;
+    /* Match opacity / translate / visibility / pointer-events in that order.
+       Download notices and open lists bypass this hover-only delay. */
+    transition-delay:
+      var(--ghost-download-intent-delay),
+      var(--ghost-download-intent-delay),
+      var(--ghost-download-intent-delay),
+      calc(var(--ghost-download-intent-delay) + var(--ghost-hover-hit-wait)) !important;
   }
 }
 @property --ghost-download-exit-y {
