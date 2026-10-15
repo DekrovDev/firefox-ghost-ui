@@ -38,6 +38,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 - Native window buttons stay hidden until you hover over the top-right corner: a 16-pixel strip in a restored window, or 8 pixels when maximized. The larger restored-window strip extends below the native resize frame. They fade in independently of the toolbar, stay available while you use them, and hide after you leave. Hidden buttons pass clicks through to the page below the activation strip.
 - The sidebar expands on hover over the page, without shifting the page. While a side tool is open, tabs stay in a compact icon rail so its controls remain visible and stationary. Closing the tool restores normal hover expansion. Passive tab previews do not reveal the toolbar.
 - The hidden toolbar passes clicks through outside its visible center pill and 3-pixel top-edge activation strip. Window controls have a separate activation strip at the top right (16 pixels in a restored window, 8 when maximized).
+- The floating navigation rectangle is excluded from native window dragging, including when transparent. Its empty space no longer serves as a window-drag handle.
 - F11 and fullscreen video hide the floating controls and sidebar.
 - Supports reduced motion and Adaptive Tab Bar Colour theme colors.
 - Optional Bonjourr animations preserve its wallpaper, search, links, and settings.
@@ -127,7 +128,7 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.13
+./scripts/Build-Release.ps1 -Version 1.0.14
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.
@@ -149,3 +150,5 @@ MIT license. Firefox, Bonjourr, and the linked extensions are separate projects;
 **1.0.12** restores the short animated collapse after submitting an address: Firefox's native transition previously overrode the submission marker. The usual two-second hover grace remains. The address field now keeps at least 120 pixels in a narrow window, letting Firefox move optional buttons into its overflow menu. Submission animations are disabled during toolbar customization and fullscreen. The expanded suite passes 67 checks, including real local-page submission, visible fade frames, reduced motion, immediate customization, narrow windows, side-tool hit targets and native fullscreen. An additional 85 coordinate clicks passed through the hidden toolbar, and the overflow menu was opened by a coordinate click in a narrow window.
 
 **1.0.13** fixes page-header clicks blocked after briefly touching the top edge. Static checks in 1.0.12 missed this trajectory: the invisible nav rectangle became clickable immediately and sustained its own hover. Opening now confirms hover intent, bridges into the visible glass and delays full-area interaction. The suite passes 96 checks, adding coordinate clicks on four page-header controls after 10 ms and 50 ms edge crossings, cancellation, early entry into the growing shell and activation through the unchanged pill. These run in the same disposable headless Firefox; they do not simulate the user's personal session.
+
+**1.0.14** explicitly disables native window dragging on the floating navigation rectangle. Firefox assigns it the `browser-titlebar` class with a native drag rule; disabling pointer events alone did not remove that separate source of Windows click interception. Toolbar dimensions, activation areas and reveal animations are unchanged. Empty navigation background is no longer a window-drag handle. The 96 headless regression checks cover toolbar behavior, but do not test Windows non-client hit testing; confirmation of the reported website symptom requires a normal Firefox window after restart.

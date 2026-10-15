@@ -263,6 +263,10 @@
   box-shadow: none !important;
   overflow: visible !important;
   pointer-events: var(--ghost-nav-pointer) !important;
+  /* Native .browser-titlebar marks this entire fixed rectangle as draggable.
+     Windows hit testing can consume page clicks even with pointer-events:none;
+     transparent toolbar space must never act as a native title bar. */
+  -moz-window-dragging: no-drag !important;
   transition: pointer-events 1ms step-end var(--ghost-nav-delay) allow-discrete !important;
   color: var(--toolbar-text-color, var(--toolbar-color, #fff)) !important;
   z-index: 101 !important;
