@@ -21,6 +21,11 @@ namespace GhostUI {
     }
 
     public static class Motion {
+        public static double OpacityAt(double from, double goal, double elapsedMs) {
+            double duration = goal > from ? 210 : 180;
+            double t = Math.Max(0, Math.Min(1, elapsedMs / duration));
+            return from + (goal - from) * t * t * (3 - 2 * t);
+        }
         public static double NextOpacity(double current, double goal, bool reduced) {
             if (reduced) return goal;
             return goal > current ? Math.Min(goal, current + .17) : Math.Max(goal, current - .12);
@@ -83,9 +88,19 @@ namespace GhostUI {
             }
             return area;
         }
-        public static bool NeedsRescue(Rectangle window, Rectangle[] monitors, bool active) {
+        public static bool NeedsRescue(Rectangle window, Rectangle frame, Rectangle[] monitors, float scale) {
             long visible = VisibleArea(window, monitors);
-            return window.Width > 0 && window.Height > 0 && visible < (long)window.Width * window.Height && (!active || visible == 0);
+            if (window.Width <= 0 || window.Height <= 0 || visible >= (long)window.Width * window.Height) return false;
+            return visible == 0 || Grips(frame, monitors, Point.Empty, scale).Count == 0;
+        }
+    }
+
+    internal sealed class RescueReadiness {
+        private Rectangle bounds;
+        private DateTime stableSince;
+        internal bool Ready(Rectangle current, bool lost, bool buttonDown, DateTime now) {
+            if (current != bounds || buttonDown) { bounds = current; stableSince = now; }
+            return !buttonDown && (lost || (now - stableSince).TotalMilliseconds >= 500);
         }
     }
 
@@ -258,6 +273,8 @@ namespace GhostUI {
         internal double Reveal = .01;
         internal string Label;
         private Bitmap surface;
+        private double fadeFrom, fadeGoal = -1;
+        private long fadeStarted;
         protected override bool ShowWithoutActivation { get { return true; } }
         protected override CreateParams CreateParams {
             get { var p = base.CreateParams; p.ExStyle |= 0x08000000 | 0x00000080 | 0x00080000; return p; }
@@ -281,6 +298,7 @@ namespace GhostUI {
             if (e.Button == MouseButtons.Left) move(this);
         }
         internal void Place(Placement placement, IntPtr target) {
+            if (!Visible) fadeGoal = -1;
             Edge = placement.Edge; Target = target;
             Bounds = placement.Bounds;
             RenderSurface(); Present();
@@ -289,7 +307,12 @@ namespace GhostUI {
         }
         internal void Fade(bool show, bool reduced) {
             double goal = show ? (Hover ? .96 : .87) : 0;
-            double next = Motion.NextOpacity(Reveal, goal, reduced);
+            long now = Stopwatch.GetTimestamp();
+            if (goal != fadeGoal || (!Visible && show)) {
+                fadeFrom = Reveal; fadeGoal = goal; fadeStarted = now;
+            }
+            double next = reduced ? goal : Motion.OpacityAt(fadeFrom, goal,
+                (now - fadeStarted) * 1000d / Stopwatch.Frequency);
             if (next != Reveal) { Reveal = next; Present(); }
             if (!show && Reveal <= .001) Hide();
         }
@@ -339,6 +362,7 @@ namespace GhostUI {
         private DateTime lastReport = DateTime.MinValue;
         private DateTime lastRescueScan = DateTime.MinValue;
         private IntPtr rescueTarget;
+        private readonly Dictionary<IntPtr, RescueReadiness> rescueReadiness = new Dictionary<IntPtr, RescueReadiness>();
         private string notice = "";
         private long tickCount;
         private double tickMs, rescueMs;
@@ -404,8 +428,14 @@ namespace GhostUI {
                     check(Native.GetForegroundWindow() == foreground, "Background recovery must preserve foreground focus");
                     fixture.Bounds = new Rectangle(work.Right - 60, work.Top + 100, 600, 400);
                     controller.lastRescueScan = DateTime.MinValue;
+                    for (int i=0; i<10; i++) controller.UpdateRescue();
+                    check(!controller.rescue.Visible, "Inactive clipped fixture with an available grip must not show return capsule");
+                    check(controller.FindTarget() == fixture.Handle, "Inactive clipped fixture must retain its ordinary grip target");
+                    fixture.Bounds = new Rectangle(work.Left + 100, work.Top + 100, 320, 240);
+                    controller.lastRescueScan = DateTime.MinValue;
                     controller.UpdateRescue();
-                    check(controller.rescue.Visible, "Inactive clipped native fixture must retain an escape control");
+                    check(!controller.rescue.Visible, "Small unfocused onscreen native fixture must not show return capsule");
+                    check(controller.FindTarget() == IntPtr.Zero, "Small onscreen background fixture must not gain grip overlays");
                     controller.suspended = true;
                     controller.UpdateRescue();
                     check(!controller.rescue.Visible, "Pause must also hide the return capsule");
@@ -417,6 +447,14 @@ namespace GhostUI {
             IntPtr foreground = Native.GetForegroundWindow();
             if (Accept(foreground)) { lastTarget = foreground; return foreground; }
             if (grips.Values.Any(g => g.Visible && g.Handle == foreground)) return target;
+            if (foreground != IntPtr.Zero && !Native.IsDesktop(foreground) && IsFullscreen(foreground)) return IntPtr.Zero;
+            // Keep external recovery grips available after a clipped window loses
+            // focus. Fully onscreen background windows never gain hover overlays.
+            if (lastTarget != IntPtr.Zero && Accept(lastTarget) && !Native.IsIconic(lastTarget) && !Native.IsZoomed(lastTarget) && !IsFullscreen(lastTarget)) {
+                Rectangle r = Native.Bounds(lastTarget);
+                long visible = Geometry.VisibleArea(r, Screen.AllScreens.Select(s => s.WorkingArea).ToArray());
+                if (visible > 0 && visible < (long)r.Width * r.Height) return lastTarget;
+            }
             return IntPtr.Zero;
         }
         private IntPtr RecoveryTarget() {
@@ -457,8 +495,17 @@ namespace GhostUI {
             lastTarget = h;
         }
         private bool NeedsRescue(IntPtr h, Rectangle[] screens) {
-            if (h == IntPtr.Zero || !Accept(h) || Native.IsIconic(h) || IsFullscreen(h)) return false;
-            return Geometry.NeedsRescue(Native.Bounds(h), screens, h == target);
+            if (h == IntPtr.Zero || !Accept(h) || Native.IsIconic(h) || Native.IsZoomed(h) || IsFullscreen(h)) return false;
+            Rectangle bounds = Native.Bounds(h);
+            Native.RECT frame;
+            if (!Native.GetWindowRect(h, out frame)) return false;
+            float scale = 1;
+            try { scale = Math.Max(1, Native.GetDpiForWindow(h) / 96f); } catch (EntryPointNotFoundException) { }
+            RescueReadiness readiness;
+            if (!rescueReadiness.TryGetValue(h, out readiness)) rescueReadiness[h] = readiness = new RescueReadiness();
+            bool ready = readiness.Ready(frame.Rectangle, Geometry.VisibleArea(bounds, screens) == 0,
+                moving || (Native.GetAsyncKeyState(1) & 0x8000) != 0, DateTime.UtcNow);
+            return ready && Geometry.NeedsRescue(bounds, frame.Rectangle, screens, scale);
         }
         private void UpdateRescue() {
             long started = Stopwatch.GetTimestamp();
@@ -471,7 +518,7 @@ namespace GhostUI {
                 rescue.Hide(); return;
             }
             DateTime now = DateTime.UtcNow;
-            Rectangle[] screens = Screen.AllScreens.Select(s => s.Bounds).ToArray();
+            Rectangle[] screens = Screen.AllScreens.Select(s => s.WorkingArea).ToArray();
             if ((now - lastRescueScan).TotalMilliseconds >= 250) {
                 lastRescueScan = now;
                 rescueTarget = NeedsRescue(lastTarget, screens) ? lastTarget : IntPtr.Zero;
@@ -483,7 +530,7 @@ namespace GhostUI {
                 }
             }
             if (rescueTarget == IntPtr.Zero || !NeedsRescue(rescueTarget, screens)) {
-                if (rescue.Visible) rescue.Fade(false, !SystemInformation.IsMenuAnimationEnabled);
+                rescue.Hide(); rescue.Reveal = .01;
                 return;
             }
             if (!rescue.Visible || rescue.Target != rescueTarget) {
@@ -495,7 +542,7 @@ namespace GhostUI {
                 var r = new Rectangle(work.Left + (work.Width - width) / 2,
                     work.Top + (int)Math.Round(8 * Math.Max(1, scale)), width, height);
                 // This return control is independent of Firefox focus. It exists
-                // only for a lost/inactive clipped window, never over that
+                // only for a lost window or one without usable external grips, never over that
                 // window's website. Clicking restores the specific captured HWND.
                 rescue.Place(new Placement(Edge.Top, r), rescueTarget);
             }
@@ -552,8 +599,6 @@ namespace GhostUI {
                 try { scale = Native.GetDpiForWindow(target) / 96f; } catch (EntryPointNotFoundException) { }
                 if (scale <= 0) scale = 1;
                 Rectangle[] monitors = Screen.AllScreens.Select(s => s.WorkingArea).ToArray();
-                long visible = Geometry.VisibleArea(bounds, Screen.AllScreens.Select(s => s.Bounds).ToArray());
-                bool clipped = visible > 0 && visible < (long)bounds.Width * bounds.Height;
                 Native.RECT frame;
                 Native.GetWindowRect(target, out frame);
                 // Stay outside the invisible native resize border as well as
@@ -566,6 +611,9 @@ namespace GhostUI {
                 bool buttonDown = (Native.GetAsyncKeyState(1) & 0x8000) != 0;
                 DateTime now = DateTime.UtcNow;
                 Placement nearest = options.OrderBy(p => Geometry.Distance(p.Bounds, pointer)).FirstOrDefault();
+                // Keep exactly one capsule, including its fade-out. Do not switch
+                // edges or chase the pointer while the user is reaching for it.
+                Grip visibleGrip = grips.Values.FirstOrDefault(g => g.Visible);
                 foreach (var pair in grips) {
                     Grip grip = pair.Value;
                     Placement placement = options.FirstOrDefault(p => p.Edge == pair.Key);
@@ -573,25 +621,23 @@ namespace GhostUI {
                     // Freeze a visible grip until it is dismissed; never chase the pointer.
                     if (grip.Visible) placement = new Placement(pair.Key, grip.Bounds);
                     bool near = Geometry.Distance(placement.Bounds, pointer) <= 18 * scale;
-                    bool closest = nearest != null && nearest.Edge == pair.Key;
+                    bool closest = visibleGrip != null ? visibleGrip == grip : nearest != null && nearest.Edge == pair.Key;
                     bool hovered = grip.Visible && grip.Bounds.Contains(pointer);
                     IntPtr under = Native.GetAncestor(Native.WindowFromPoint(pointer), 2);
                     bool unobstructed = under == target || grips.Values.Any(g => g.Visible && g.Handle == under);
-                    // Outside the target, show only when the foreground is still this Firefox.
-                    // A foreign foreground or a popup within the target suppresses all grips.
+                    // A popup or foreign window covering the Firefox hit area
+                    // suppresses reveal; background clipped windows use hover too.
                     bool blocked = !unobstructed && (bounds.Contains(pointer) || Native.GetWindow(under, 4) == target);
                     if (blocked) near = false;
-                    // If a window is partly offscreen, retain visible rescue grips
-                    // even without hover. Fully on-screen windows stay quiet.
-                    bool requested = !buttonDown && !blocked && (clipped || hovered || (near && closest));
+                    bool requested = !buttonDown && !blocked && closest && (hovered || near);
                     if (requested) {
                         if (!approached.ContainsKey(pair.Key)) approached[pair.Key] = now;
-                        if ((now - approached[pair.Key]).TotalMilliseconds >= 100 || hovered) {
+                        if ((now - approached[pair.Key]).TotalMilliseconds >= 120 || hovered) {
                             if (!grip.Visible) grip.Place(placement, target);
                             lastNear = now;
                         }
                     } else approached.Remove(pair.Key);
-                    if (grip.Visible) grip.Fade(requested || (now - lastNear).TotalMilliseconds < 400, !SystemInformation.IsMenuAnimationEnabled);
+                    if (grip.Visible) grip.Fade(!buttonDown && !blocked && (requested || (now - lastNear).TotalMilliseconds < 220), !SystemInformation.IsMenuAnimationEnabled);
                 }
                 UpdateRescue(); Report();
             } catch (Exception e) {
@@ -753,12 +799,54 @@ namespace GhostUI {
                 for (int i = 0; i < 20; i++) opacity = Motion.NextOpacity(opacity, 0, false);
                 Check(opacity == 0, "Fade must finish");
                 Check(Motion.NextOpacity(0, .82, true) == .82, "Reduced motion immediate reveal");
-                Check(Geometry.NeedsRescue(new Rectangle(3000,100,900,600), only, false), "Inactive completely lost Firefox needs return button");
-                Check(Geometry.NeedsRescue(new Rectangle(3000,100,900,600), only, true), "Active completely lost Firefox needs return button");
-                Check(Geometry.NeedsRescue(new Rectangle(1800,100,900,600), only, false), "Inactive clipped Firefox needs return button");
-                Check(!Geometry.NeedsRescue(new Rectangle(1800,100,900,600), only, true), "Active clipped Firefox already has its external grips");
-                Check(!Geometry.NeedsRescue(new Rectangle(300,100,900,600), only, false), "Onscreen background Firefox must not show return overlay");
-                Check(!Geometry.NeedsRescue(Rectangle.Empty, only, false), "Closed or invalid Firefox must not show return overlay");
+                Check(Motion.OpacityAt(.01, .87, 0) == .01, "Reveal starts at current opacity without a flash");
+                Check(Math.Abs(Motion.OpacityAt(.01, .87, 210) - .87) < .00001, "Reveal settles after 210 ms");
+                Check(Motion.OpacityAt(.87, 0, 180) == 0, "Dismissal reaches zero after 180 ms");
+                Check(Motion.OpacityAt(.01, .87, 30) < .01 + (.86 * 30 / 210), "Reveal starts gently instead of jumping linearly");
+                double prior = .01;
+                for (int ms=0; ms<=300; ms+=10) {
+                    double next = Motion.OpacityAt(.01, .87, ms);
+                    Check(next >= prior && next <= .87, "Timed reveal must be monotonic and bounded");
+                    prior = next;
+                }
+                prior = .87;
+                for (int ms=0; ms<=300; ms+=10) {
+                    double next = Motion.OpacityAt(.87, 0, ms);
+                    Check(next <= prior && next >= 0, "Timed dismissal must be monotonic and bounded");
+                    prior = next;
+                }
+                foreach (float dpi in new[] { 1f, 1.25f, 1.5f, 2f }) {
+                    foreach (Rectangle pose in new[] { new Rectangle(100,100,320,240), new Rectangle(0,0,320,240),
+                        new Rectangle(1800,100,900,600), new Rectangle(-800,100,900,600),
+                        new Rectangle(400,-500,900,600), new Rectangle(400,950,900,600),
+                        new Rectangle(1910,100,900,600), new Rectangle(300,100,900,600) }) {
+                        Check(!Geometry.NeedsRescue(pose, pose, only, dpi), "Accessible small/clipped window must not show return capsule at DPI " + dpi);
+                    }
+                    Rectangle lost = new Rectangle(3000,100,900,600);
+                    Check(Geometry.NeedsRescue(lost, lost, only, dpi), "Completely lost window needs return capsule");
+                    Rectangle enclosing = new Rectangle(-100,-100,2200,1400);
+                    Check(Geometry.NeedsRescue(enclosing, enclosing, only, dpi), "Oversized window without accessible edges needs rescue");
+                    Rectangle sliver = new Rectangle(1919,1079,600,400);
+                    Check(Geometry.NeedsRescue(sliver, sliver, only, dpi), "Corner sliver without space for a grip needs rescue");
+                    Check(!Geometry.NeedsRescue(Rectangle.Empty, Rectangle.Empty, only, dpi), "Invalid window must not show return capsule");
+                }
+                Rectangle small = new Rectangle(100,100,320,240);
+                Check(!Geometry.NeedsRescue(small, new Rectangle(92,92,336,256), only, 1.25f), "Invisible resize margins must not trigger rescue for a visible small window");
+                Rectangle[] separated = { new Rectangle(-1600,0,1400,900), new Rectangle(0,0,1920,1040) };
+                Rectangle gap = new Rectangle(-190,100,180,400);
+                Check(Geometry.NeedsRescue(gap, gap, separated, 1), "Window lost in monitor gap needs rescue");
+                Rectangle second = new Rectangle(-1500,100,320,240);
+                Check(!Geometry.NeedsRescue(second, second, separated, 1.5f), "Small window on negative-coordinate monitor must stay quiet");
+                var readiness = new RescueReadiness();
+                DateTime instant = DateTime.UtcNow;
+                Check(!readiness.Ready(small, false, false, instant), "Partial rescue waits for stable bounds");
+                Check(!readiness.Ready(small, false, false, instant.AddMilliseconds(499)), "Partial rescue must not appear early");
+                Check(readiness.Ready(small, false, false, instant.AddMilliseconds(500)), "Stable inaccessible window becomes recoverable after 500 ms");
+                Check(!readiness.Ready(small, false, true, instant.AddSeconds(1)), "Held mouse suppresses rescue and restarts delay");
+                Check(!readiness.Ready(small, false, false, instant.AddMilliseconds(1499)), "Mouse release retains settling delay");
+                Check(readiness.Ready(small, false, false, instant.AddMilliseconds(1500)), "Settling ends after release");
+                Check(readiness.Ready(small, true, false, instant), "Completely lost window skips settling delay");
+                Check(!readiness.Ready(small, true, true, instant), "Even a lost window must not show rescue while dragging");
                 foreach (Size size in new[] { new Size(128,14), new Size(160,18), new Size(192,21), new Size(14,128) }) {
                     using (Bitmap capsule = Capsule.Render(size, false)) {
                         Check(capsule.GetPixel(0,0).A == 0, "Capsule corner must be transparent");
