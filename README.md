@@ -136,6 +136,12 @@ Firefox must be closed first. Without an explicit path, `-NoPrompt` selects the 
 
 To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **before** installing. If you edit already installed files, save your changes before using the installer again.
 
+## Troubleshooting
+
+### Extensions panel flashes or does not open from the menu
+
+If **☰ → Extensions** closes the menu but does not open a lasting extensions panel, [this optional CSS workaround](docs/extensions-panel-workaround.md) may help. The affected user confirmed it on Firefox 158.0.1 for Windows with the extensions button set to auto-hide. The guide includes the exact rule, backup and rollback steps, and its verification limits. Apply it only if you encounter the symptom.
+
 ## Development
 
 ```powershell
