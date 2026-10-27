@@ -8,6 +8,8 @@ try {
     $profile = Select-GhostProfile $ProfilePath -NoPrompt:$NoPrompt
     Write-Host "Restoring original Firefox configuration in:`n$profile"
     Wait-GhostFirefoxClosed -NoPrompt:$NoPrompt
+    Import-Module (Join-Path $PSScriptRoot 'scripts\Handles.psm1') -Force -DisableNameChecking
+    Uninstall-GhostHandles -ProfilePath $profile
     $result = Uninstall-GhostUI $profile
     Write-Host 'Uninstalled. Start Firefox to apply the restored configuration.' -ForegroundColor Green
     Write-Host "Backups remain available: $($result.Backup)"

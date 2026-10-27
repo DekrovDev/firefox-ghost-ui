@@ -45,6 +45,18 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 
 ## Install automatically on Windows
 
+### Adaptive window grips (unreleased 1.1.0 development)
+
+A small Windows companion reveals a grip outside a restored Firefox window after the pointer approaches a visible edge for about 100 ms. The grip stays stationary and starts Windows' native move operation on left press. It does not cover or shift the website, or replace the native resize border. Partly offscreen windows retain their available grips without hovering. Placement respects monitor work areas and gaps.
+
+**Ctrl+Alt+F9** starts keyboard window movement (restoring a maximized window first). **Ctrl+Alt+F10** returns the window to the monitor under the pointer, including completely lost or oversized windows. F11/video fullscreen remains untouched; exit fullscreen first. After display changes, completely offscreen restored windows return without taking focus. The tray menu provides pause, move, return and exit. The companion starts at Windows sign-in and serves Firefox windows in the current Windows session; it does not read browser content or inject code.
+
+A separate **↩ Firefox** return capsule stays available when a clipped window loses focus, or when Firefox is completely offscreen. Clicking it restores that window without first activating it. This exceptional topmost recovery control can briefly overlap another normal application's chrome; normal drag grips stay outside the website. It is suppressed over fullscreen applications.
+
+For an existing theme installation, run `./Install-Handles.ps1 -ProfilePath 'full Firefox profile path'` without restarting Firefox. Geometry and isolated installer tests are automated. The user confirmed that a grip appears, moves Firefox while held, and stops on release. **Full native regression remains pending:** Computer Use blocks this browser's URL enforcement, and capture of a separate test window timed out. See [behavior and verification](docs/adaptive-handles.md).
+
+### Theme and companion installation
+
 1. Install desktop Firefox and open it once to create a profile.
 2. [Download the latest Windows ZIP](https://github.com/DekrovDev/firefox-ghost-ui/releases/latest), then **extract the entire archive**.
 3. Double-click **Install.cmd**. If you have multiple profiles, choose the one you use.
@@ -128,7 +140,8 @@ To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **
 
 ```powershell
 ./tests/Installer.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.0.14
+./tests/Handles.Tests.ps1
+./scripts/Build-Release.ps1 -Version 1.1.0
 ```
 
 The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.

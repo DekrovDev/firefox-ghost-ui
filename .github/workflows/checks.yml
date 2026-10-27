@@ -17,3 +17,9 @@ jobs:
       - name: PowerShell 7
         shell: pwsh
         run: ./tests/Installer.Tests.ps1
+      - name: Adaptive window grips
+        shell: powershell
+        run: ./tests/Handles.Tests.ps1
+      - name: Packaged installation
+        shell: powershell
+        run: ./tests/Package.Tests.ps1
