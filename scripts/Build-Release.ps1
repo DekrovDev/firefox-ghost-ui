@@ -1,6 +1,6 @@
 #requires -Version 5.1
 [CmdletBinding()]
-param([string]$Version = '1.1.0')
+param([string]$Version = '1.1.1')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Use a numeric version such as 1.0.0.' }
 $root = Split-Path $PSScriptRoot -Parent
@@ -13,7 +13,7 @@ $zip = [IO.Compression.ZipFile]::Open($output, [IO.Compression.ZipArchiveMode]::
 try {
     # Explicit list: only distributable files and approved demo screenshots.
     foreach ($name in @('Install.cmd','Install.ps1','Uninstall.cmd','Uninstall.ps1',
-                         'README.md','README.ru.md','LICENSE','theme/userChrome.css','theme/bonjourr.css',
+                         'README.md','LICENSE','theme/userChrome.css','theme/bonjourr.css',
                          'scripts/GhostUI.psm1','scripts/Select-Profile.ps1',
                          'Install-Handles.ps1','Uninstall-Handles.ps1','scripts/Handles.psm1','scripts/Build-Handles.ps1',
                          'companion/GhostHandles.cs','companion/GhostHandles.exe.config','companion/GhostHandles.manifest',
