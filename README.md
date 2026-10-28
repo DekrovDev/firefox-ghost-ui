@@ -1,6 +1,6 @@
 # Firefox Ghost UI
 
-[Русский](README.ru.md) · [Download for Windows](https://github.com/DekrovDev/firefox-ghost-ui/releases/latest) · [Report an issue](https://github.com/DekrovDev/firefox-ghost-ui/issues)
+[Download for Windows](https://github.com/DekrovDev/firefox-ghost-ui/releases/latest) · [Report an issue](https://github.com/DekrovDev/firefox-ghost-ui/issues)
 
 A floating Firefox toolbar that stays out of the way, with native vertical tabs and optional Bonjourr animations.
 
