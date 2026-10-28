@@ -289,8 +289,8 @@ namespace GhostUI {
             MouseEnter += delegate { Hover = true; RenderSurface(); Present(); };
             MouseLeave += delegate { Hover = false; RenderSurface(); Present(); };
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Move window / Переместить", null, delegate { Native.BeginMove(Target, Cursor.Position); });
-            menu.Items.Add("Return to screen / Вернуть на экран", null, delegate { recover(); });
+            menu.Items.Add("Move window", null, delegate { Native.BeginMove(Target, Cursor.Position); });
+            menu.Items.Add("Return to screen", null, delegate { recover(); });
             ContextMenuStrip = menu;
         }
         protected override void OnMouseDown(MouseEventArgs e) {
@@ -380,16 +380,16 @@ namespace GhostUI {
             foreach (Edge edge in Enum.GetValues(typeof(Edge))) grips.Add(edge, new Grip(BeginMove, Recover));
             rescue = new Grip(delegate(Grip g) { Recover(g.Target); }, delegate { Recover(rescueTarget); }) {
                 Label = "↩  Firefox", TopMost = true,
-                AccessibleName = "Return Firefox to screen / Вернуть Firefox на экран",
+                AccessibleName = "Return Firefox to screen",
                 Text = "Ghost UI — return Firefox"
             };
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Move Firefox / Переместить  ·  Ctrl+Alt+F9", null, delegate { MoveByKeyboard(); });
-            menu.Items.Add("Return Firefox to screen / Вернуть  ·  Ctrl+Alt+F10", null, delegate { Recover(); });
-            menu.Items.Add("Pause handles / Приостановить", null, delegate(object sender, EventArgs e) {
+            menu.Items.Add("Move Firefox · Ctrl+Alt+F9", null, delegate { MoveByKeyboard(); });
+            menu.Items.Add("Return Firefox to screen · Ctrl+Alt+F10", null, delegate { Recover(); });
+            menu.Items.Add("Pause handles", null, delegate(object sender, EventArgs e) {
                 suspended = !suspended; ((ToolStripMenuItem)sender).Checked = suspended; if (suspended) HideGrips(true);
             });
-            menu.Items.Add("Exit / Выход", null, delegate { Application.Exit(); });
+            menu.Items.Add("Exit", null, delegate { Application.Exit(); });
             tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "Ghost UI — adaptive window handles", ContextMenuStrip = menu, Visible = !testMode };
             tray.DoubleClick += delegate { Recover(); };
             IntPtr controllerHandle = Handle;
