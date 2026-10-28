@@ -1,6 +1,6 @@
 # Extensions panel closes immediately: optional workaround
 
-[Русский](extensions-panel-workaround.ru.md) · [Back to README](../README.md)
+[Back to README](../README.md)
 
 ## When this may help
 
