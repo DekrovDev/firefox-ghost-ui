@@ -14,6 +14,15 @@ $profile = Join-Path $sandbox 'disposable profile'
 [IO.Directory]::CreateDirectory($profile) | Out-Null
 [IO.File]::WriteAllText((Join-Path $profile 'prefs.js'), '// isolated package test')
 try {
+    # English-only release: reject translated documentation and Cyrillic in packaged text.
+    $textExtensions = @('.md', '.ps1', '.psm1', '.cs', '.css', '.cmd', '.config', '.manifest')
+    foreach ($file in @(Get-ChildItem -LiteralPath $package -File -Recurse)) {
+        if ($file.Name -like '*.ru.md') { throw "Translation accidentally packaged: $($file.FullName)" }
+        if ($textExtensions -contains $file.Extension) {
+            $body = [IO.File]::ReadAllText($file.FullName)
+            if ($body -match '[\u0400-\u052F]') { throw "Cyrillic text found in package: $($file.FullName)" }
+        }
+    }
     foreach ($name in @('Install-Handles.ps1','Uninstall-Handles.ps1','docs\adaptive-handles.md',
                        'companion\GhostHandles.cs','companion\GhostHandles.exe.config','companion\GhostHandles.manifest')) {
         if (-not (Test-Path -LiteralPath (Join-Path $package $name))) { throw "Missing packaged file: $name" }
