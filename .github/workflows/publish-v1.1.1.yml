@@ -42,7 +42,7 @@ jobs:
             throw 'Release ZIP or checksum file is missing.'
           }
           $line = (Get-Content -LiteralPath $checksums -Raw).Trim()
-          if ($line -notmatch '^([a-f0-9]{64})  firefox-ghost-ui-1\.1\.0-windows\.zip$') {
+          if ($line -notmatch '^([a-f0-9]{64})  firefox-ghost-ui-1\.1\.1-windows\.zip$') {
             throw 'Unexpected checksum file format.'
           }
           $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
