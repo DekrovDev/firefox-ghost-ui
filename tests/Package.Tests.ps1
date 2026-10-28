@@ -7,7 +7,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $sandbox = Join-Path $root ('test-output\package-' + [Guid]::NewGuid().ToString('N'))
 $registry = 'HKCU:\Software\FirefoxGhostUI-PackageTests-' + [Guid]::NewGuid().ToString('N')
 [IO.Directory]::CreateDirectory($sandbox) | Out-Null
-$archive = Join-Path $root 'dist\firefox-ghost-ui-1.1.0-windows.zip'
+$archive = Join-Path $root 'dist\firefox-ghost-ui-1.1.1-windows.zip'
 [IO.Compression.ZipFile]::ExtractToDirectory($archive, $sandbox)
 $package = Join-Path $sandbox 'firefox-ghost-ui'
 $profile = Join-Path $sandbox 'disposable profile'
