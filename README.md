@@ -45,7 +45,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 
 ## Install automatically on Windows
 
-### Adaptive window grips (unreleased 1.1.0 development)
+### Adaptive window grips (v1.1.0)
 
 A small Windows companion reveals a grip outside a restored Firefox window after the pointer approaches a visible edge for about 100 ms. The grip stays stationary and starts Windows' native move operation on left press. It does not cover or shift the website, or replace the native resize border. Partly offscreen windows retain their available grips without hovering. Placement respects monitor work areas and gaps.
 
