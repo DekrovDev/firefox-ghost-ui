@@ -70,7 +70,9 @@ def profile_closed(profile):
                                       wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
         kernel.CreateFileW.restype = wintypes.HANDLE
         kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        handle = kernel.CreateFileW(str(path), 0, 0, None, 3, 0, None)
+        # Metadata-only (zero desired access) can succeed despite an existing
+        # data handle. Require exclusive read/write access to detect a live lock.
+        handle = kernel.CreateFileW(str(path), 0xC0000000, 0, None, 3, 0, None)
         if handle == wintypes.HANDLE(-1).value:
             return False
         kernel.CloseHandle(handle)
