@@ -156,6 +156,9 @@ class BridgeTests(unittest.TestCase):
                 pass
 
             def do_POST(handler):
+                # Consume the small synthetic POST before closing; otherwise
+                # Windows can reset the connection and discard the 302 response.
+                handler.rfile.read(int(handler.headers['Content-Length']))
                 handler.send_response(302)
                 handler.send_header('Location', f'http://127.0.0.1:{self.port}/')
                 handler.send_header('Content-Length', '0')
