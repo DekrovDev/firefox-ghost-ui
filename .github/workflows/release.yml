@@ -1,0 +1,74 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.repository == 'DekrovDev/firefox-ghost-ui'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate real tag against VERSION
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'VERSION')).Trim()
+          if ($version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Invalid VERSION.' }
+          if ($env:GITHUB_REF -cne "refs/tags/v$version") { throw 'Tag must match VERSION.' }
+      - name: Installer on Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/Installer.Tests.ps1
+      - name: Installer on PowerShell 7
+        shell: pwsh
+        run: ./tests/Installer.Tests.ps1
+      - name: Adaptive window grips
+        shell: powershell
+        run: ./tests/Handles.Tests.ps1
+      - name: Package installation, links and checksum
+        shell: powershell
+        run: ./tests/Package.Tests.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-package
+          path: |
+            dist/firefox-ghost-ui-*-windows.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 1
+  publish:
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-package
+          path: dist
+      - name: Verify artifact and create release without replacing history
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_REF -cnotmatch '^refs/tags/v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$') { throw 'Invalid tag.' }
+          $version = $Matches[1]
+          $tag = "v$version"
+          $name = "firefox-ghost-ui-$version-windows.zip"
+          $archive = Join-Path './dist' $name
+          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ([IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'dist/SHA256SUMS.txt')).Trim() -cne "$hash  $name") { throw 'Checksum mismatch.' }
+          gh release view $tag --repo $env:GH_REPO *> $null
+          if ($LASTEXITCODE -eq 0) { throw 'Release already exists; refusing to replace history.' }
+          gh release create $tag $archive './dist/SHA256SUMS.txt' --verify-tag --title $tag --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
