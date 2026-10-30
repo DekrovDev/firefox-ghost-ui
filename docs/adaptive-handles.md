@@ -33,6 +33,14 @@ The executable enables PerMonitorV2 awareness before creating HWNDs, avoiding vi
 
 The tray menu offers pause, move, return and exit. Exit stops the current process; uninstall from every registered profile to remove sign-in registration. Companion-only removal leaves the theme intact; full removal uses `Uninstall.cmd` after closing Firefox.
 
+### Recovery after an interrupted installation
+
+Companion metadata uses a version-2 ownership journal. It records both the intended startup command and the previous owned command before changing HKCU Run, then confirms the change. Metadata replacement is atomic, and an exclusive file handle serializes companion changes in the same installation directory. A leftover `.installation.lock` file is harmless: ownership depends on an open OS handle, not the file's presence.
+
+Retrying install or uninstall recognizes an interrupted transition. A foreign startup command is preserved; uninstall reports the conflict and retains recovery metadata. Older installation metadata remains readable. Failed companion installation attempts restore the preceding registration where possible; if recovery itself fails, the journal is retained and the error identifies incomplete rollback.
+
+The full installer also checkpoints the profile before changing it. A companion-stage failure restores the profile to its pre-attempt state, including an existing Ghost UI installation during an update. It does not silently uninstall a previously working version. Firefox must remain closed, and detected concurrent profile edits block rollback to preserve the edited files. Recovery checkpoints remain under `chrome/ghost-ui-backups/`.
+
 ## Verification and limitations
 
 Automated tests cover geometry, negative coordinates, mixed DPI, gaps, clipping, complete loss, oversized-window containment, alpha edges and isolated installer lifetime. Offscreen WinForms fixtures check layered rendering, return-capsule binding, containment, unchanged foreground focus, actual recovery, disappearance and pause. They do not target personal Firefox or inject input.

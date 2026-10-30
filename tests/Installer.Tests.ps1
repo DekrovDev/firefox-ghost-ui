@@ -25,6 +25,90 @@ function Expect-Failure([scriptblock]$Action, [string]$Message) {
     try { & $Action | Out-Null } catch { $failed = $true }
     Assert $failed $Message
 }
+function Invoke-TestInstaller([string]$Entry, [string]$Profile) {
+    $engine = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $output = & $engine -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $Entry -ProfilePath $Profile -NoPrompt 2>&1 | Out-String
+    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+}
+function Test-CombinedInstallerRollback {
+    # Copy only product sources into our disposable fixture. Rewrite the Run
+    # default in that copy so top-level entry points never touch a real Run key.
+    $fixture = Join-Path $sandbox 'combined installer'
+    [IO.Directory]::CreateDirectory($fixture) | Out-Null
+    foreach ($name in @('Install.ps1','Uninstall.ps1','VERSION','scripts','theme','companion')) {
+        Copy-Item -LiteralPath (Join-Path $root $name) -Destination $fixture -Recurse
+    }
+    $testRegistry = 'HKCU:\Software\FirefoxGhostUI-CombinedTests-' + [Guid]::NewGuid().ToString('N')
+    $modulePath = Join-Path $fixture 'scripts\Handles.psm1'
+    $moduleText = Read-TestFile $modulePath
+    $realRun = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    Assert ($moduleText.Contains($realRun)) 'Fixture redirects the exact production startup default'
+    Write-TestFile $modulePath ($moduleText.Replace($realRun, $testRegistry))
+    $oldLocalAppData = $env:LOCALAPPDATA
+    $fixtureJunctions = @()
+    try {
+        foreach ($isUpdate in @($false, $true)) {
+            $name = if ($isUpdate) { 'update' } else { 'first install' }
+            $profile = New-TestProfile ('combined ' + $name)
+            Write-TestFile (Join-Path $profile 'user.js') '// preserve original user settings'
+            Write-TestFile (Join-Path $profile 'chrome\userChrome.css') '/* preserve original CSS */'
+            if ($isUpdate) { Install-GhostUI $profile (Join-Path $fixture 'theme') | Out-Null }
+            $files = @('prefs.js','user.js','chrome/userChrome.css','chrome/userContent.css',
+                       'chrome/userChrome.ghost-ui-original.css','chrome/userContent.ghost-ui-original.css',
+                       'chrome/ghost-ui/userChrome.css','chrome/ghost-ui/userContent.css','chrome/ghost-ui/state.json')
+            $before = @{}
+            foreach ($file in $files) {
+                $path = Join-Path $profile $file
+                $before[$file] = if ([IO.File]::Exists($path)) { (Get-FileHash -LiteralPath $path).Hash } else { $null }
+            }
+            # Redirected handles root is a deterministic pre-mutation helper failure.
+            $env:LOCALAPPDATA = Join-Path $fixture ($name + ' local app data')
+            $handlesRoot = Join-Path $env:LOCALAPPDATA 'FirefoxGhostUI\handles'
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($handlesRoot)) | Out-Null
+            $destination = Join-Path $fixture ($name + ' redirected target')
+            [IO.Directory]::CreateDirectory($destination) | Out-Null
+            $fixtureJunctions += $handlesRoot
+            New-Item -ItemType Junction -Path $handlesRoot -Target $destination | Out-Null
+            $result = Invoke-TestInstaller (Join-Path $fixture 'Install.ps1') $profile
+            Assert ($result.ExitCode -eq 1 -and $result.Output -match 'Profile rollback completed') ('Helper failure reports rollback: ' + $name + ': ' + $result.Output)
+            foreach ($file in $files) {
+                $path = Join-Path $profile $file
+                $after = if ([IO.File]::Exists($path)) { (Get-FileHash -LiteralPath $path).Hash } else { $null }
+                Assert ($after -ceq $before[$file]) ('Combined rollback preserves pre-attempt file: ' + $name + '/' + $file)
+            }
+            if (-not $isUpdate) { Assert (-not [IO.Directory]::Exists((Join-Path $profile 'chrome\ghost-ui'))) 'First-install rollback removes only the empty managed directory' }
+        }
+        $env:LOCALAPPDATA = Join-Path $fixture 'successful local app data'
+        $profile = New-TestProfile 'combined success'
+        $installed = Invoke-TestInstaller (Join-Path $fixture 'Install.ps1') $profile
+        Assert ($installed.ExitCode -eq 0) ('Top-level install succeeds: ' + $installed.Output)
+        Assert (Test-Path -LiteralPath (Join-Path $profile 'chrome\ghost-ui\state.json')) 'Top-level install creates profile state'
+        Assert ([bool](Get-ItemProperty -LiteralPath $testRegistry -Name 'FirefoxGhostUIHandles')) 'Top-level install registers owned startup in fixture key'
+        $removed = Invoke-TestInstaller (Join-Path $fixture 'Uninstall.ps1') $profile
+        Assert ($removed.ExitCode -eq 0) ('Top-level uninstall succeeds: ' + $removed.Output)
+        Assert (-not (Get-ItemProperty -LiteralPath $testRegistry -Name 'FirefoxGhostUIHandles' -ErrorAction SilentlyContinue)) 'Top-level uninstall removes fixture startup'
+        Assert (-not (Test-Path -LiteralPath (Join-Path $profile 'chrome\ghost-ui\state.json'))) 'Top-level uninstall removes installed profile state'
+    } finally {
+        try {
+            Import-Module (Join-Path $root 'scripts\Handles.psm1') -Force -DisableNameChecking
+            $prefix = [IO.Path]::GetFullPath($fixture).TrimEnd('\') + '\'
+            foreach ($owned in @(Get-Process -Name GhostHandles -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })) {
+                Stop-GhostHandles $owned.Path
+            }
+            foreach ($link in $fixtureJunctions) {
+                $absoluteLink = [IO.Path]::GetFullPath($link)
+                if (-not $absoluteLink.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe fixture junction refused.' }
+                if ([IO.Directory]::Exists($absoluteLink)) {
+                    if (-not ((Get-Item -LiteralPath $absoluteLink -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Fixture junction was replaced; cleanup refused.' }
+                    [IO.Directory]::Delete($absoluteLink, $false) # Unlink only, never recurse into the target.
+                }
+            }
+        } finally {
+            $env:LOCALAPPDATA = $oldLocalAppData
+            if (Test-Path -LiteralPath $testRegistry) { Remove-Item -LiteralPath $testRegistry }
+        }
+    }
+}
 try {
     $theme = Join-Path $root 'theme'
     $fresh = New-TestProfile 'fresh profile with spaces'
@@ -227,7 +311,11 @@ try {
     Assert ((@($profiles | Where-Object { $_.IsDefault })[0].Path) -eq $p2) 'Uses current Firefox installation default'
     Expect-Failure { Install-GhostUI (Join-Path $sandbox 'not-a-profile') $theme } 'Invalid profile refused'
 
+    Test-CombinedInstallerRollback
     Write-Host "PASS: $script:Passed installer assertions (PowerShell $($PSVersionTable.PSVersion))."
+} catch {
+    Write-Host ('Installer assertions failed: ' + $_.Exception.Message)
+    throw
 } finally {
     # The only recursive cleanup target is the unique test directory created above.
     $resolved = [IO.Path]::GetFullPath($sandbox)

@@ -2,7 +2,7 @@
 
 These are developer tools recovered from older Ghost UI checks. They are not part of normal installation, are excluded from the Windows release ZIP, and do not replace `Install.cmd` or `Uninstall.cmd`.
 
-Status: source reviewed, runtime validation pending. Python 3.10+ is required. Firefox startup helpers currently target desktop Firefox on Windows. The stdlib-only regression fixtures do not require Firefox.
+Status: source reviewed with regression validation on GitHub Actions Windows. Python 3.10+ is required. Firefox startup helpers currently target desktop Firefox on Windows. The stdlib-only regression fixtures do not require Firefox; real Firefox startup and visual behavior require separate checks.
 
 ## Authenticated probe
 
@@ -34,21 +34,14 @@ The search helper supports the same recovery options. Recovery restores temporar
 
 ## Regression fixtures
 
-`test_ghost_safety.py` currently contains 24 test methods for authentication, redirects, framing, body limits, absolute deadlines, parent/child shutdown, recovery, CSS preservation and driver fault paths. They use only synthetic profiles, mock commands/processes and isolated ephemeral loopback ports. They never start Firefox or connect to the real bridge port.
+`test_ghost_safety.py` contains 25 test methods for authentication, redirects, framing, body limits, absolute deadlines, parent/child shutdown, recovery, CSS preservation, Windows profile locks and driver fault paths. They use only synthetic profiles, mock commands/processes and ephemeral loopback ports. They never start Firefox or connect to the real bridge port.
 
-The tests have **not been executed** in this change. The security review's execution rules require all of:
-
-- OS-enforced denial of external networking, with a private loopback namespace;
-- an empty environment populated from an explicit safe allowlist, with HOME/TEMP/cache in scratch;
-- read-only source and toolchain, with writes restricted to assigned scratch;
-- explicit low CPU, memory, process, file-size, disk and wall-clock limits.
-
-Once those controls are available, run from this directory:
+Project CI runs these fixtures on disposable GitHub-hosted Windows virtual machines. Use an isolated development environment when running them manually. From this directory:
 
 ```text
 python -m unittest -v test_ghost_safety
 ```
 
-Validate the Windows profile-lock path separately in equivalent Windows isolation with artificial locks. Merely opening a fresh profile or mocking browser commands does not provide the required OS isolation.
+The Windows profile-lock fixture uses an artificial locked file. Browser policies, real extension behavior and real profile recovery are outside these fixtures.
 
-See the [source review](../../docs/security/helper-control-review.md) for scope and limitations. This source snapshot is not a claim that runtime tests passed or that the entire product is free of vulnerabilities.
+See the [source review](../../docs/security/helper-control-review.md) for scope and validation history. Passing these fixtures does not establish that the entire product is free of vulnerabilities.

@@ -2,21 +2,175 @@
 
 Run: python tests/Toolbar.Tests.py --firefox "C:/Program Files/Mozilla Firefox/firefox.exe"
 No personal profile, extension settings, accounts or browsing data are used.
+Windows 10+ only: Firefox is created inside a non-inherited kill-on-close Job
+object, so driver death closes the job even before Python cleanup can run.
 """
+import atexit
 import argparse
+import ctypes
 import json
 import pathlib
+import os
 import shutil
 import socket
 import subprocess
 import tempfile
 import time
+import sys
 import zipfile
 import threading
 from urllib.parse import quote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+class JobProcess:
+    """Create a process atomically inside our Windows kill-on-close job.
+
+    Using PROC_THREAD_ATTRIBUTE_JOB_LIST avoids the Popen/AssignProcess race.
+    Fail closed if job attributes are unsupported; never start unowned Firefox.
+    """
+    def __init__(self, args):
+        if os.name != 'nt':
+            raise OSError('These browser checks require Windows 10+ job support')
+        from ctypes import wintypes as w
+        self.args = list(map(str, args))
+        self.returncode = None
+        self._job = None
+        self._handle = None
+        self.api = ctypes.WinDLL('kernel32', use_last_error=True)
+        size_t = ctypes.c_size_t
+
+        class BasicLimits(ctypes.Structure):
+            _fields_ = [('process_time', ctypes.c_longlong), ('job_time', ctypes.c_longlong),
+                        ('flags', w.DWORD), ('min_working_set', size_t), ('max_working_set', size_t),
+                        ('active_processes', w.DWORD), ('affinity', size_t),
+                        ('priority', w.DWORD), ('scheduling', w.DWORD)]
+
+        class ExtendedLimits(ctypes.Structure):
+            _fields_ = [('basic', BasicLimits), ('io', ctypes.c_ulonglong * 6),
+                        ('process_memory', size_t), ('job_memory', size_t),
+                        ('peak_process_memory', size_t), ('peak_job_memory', size_t)]
+
+        class StartupInfo(ctypes.Structure):
+            _fields_ = [('cb', w.DWORD), ('reserved', w.LPWSTR), ('desktop', w.LPWSTR), ('title', w.LPWSTR),
+                        ('x', w.DWORD), ('y', w.DWORD), ('width', w.DWORD), ('height', w.DWORD),
+                        ('xchars', w.DWORD), ('ychars', w.DWORD), ('fill', w.DWORD), ('flags', w.DWORD),
+                        ('show', w.WORD), ('reserved_size', w.WORD), ('reserved_bytes', ctypes.POINTER(w.BYTE)),
+                        ('stdin', w.HANDLE), ('stdout', w.HANDLE), ('stderr', w.HANDLE)]
+
+        class StartupInfoEx(ctypes.Structure):
+            _fields_ = [('startup', StartupInfo), ('attributes', w.LPVOID)]
+
+        class ProcessInfo(ctypes.Structure):
+            _fields_ = [('process', w.HANDLE), ('thread', w.HANDLE), ('pid', w.DWORD), ('tid', w.DWORD)]
+
+        signatures = {
+            'CreateJobObjectW': ([w.LPVOID, w.LPCWSTR], w.HANDLE),
+            'SetInformationJobObject': ([w.HANDLE, ctypes.c_int, w.LPVOID, w.DWORD], w.BOOL),
+            'InitializeProcThreadAttributeList': ([w.LPVOID, w.DWORD, w.DWORD, ctypes.POINTER(size_t)], w.BOOL),
+            'UpdateProcThreadAttribute': ([w.LPVOID, w.DWORD, size_t, w.LPVOID, size_t, w.LPVOID, w.LPVOID], w.BOOL),
+            'DeleteProcThreadAttributeList': ([w.LPVOID], None),
+            'CreateProcessW': ([w.LPCWSTR, w.LPWSTR, w.LPVOID, w.LPVOID, w.BOOL, w.DWORD,
+                                w.LPVOID, w.LPCWSTR, w.LPVOID, ctypes.POINTER(ProcessInfo)], w.BOOL),
+            'IsProcessInJob': ([w.HANDLE, w.HANDLE, ctypes.POINTER(w.BOOL)], w.BOOL),
+            'CloseHandle': ([w.HANDLE], w.BOOL),
+            'WaitForSingleObject': ([w.HANDLE, w.DWORD], w.DWORD),
+            'GetExitCodeProcess': ([w.HANDLE, ctypes.POINTER(w.DWORD)], w.BOOL),
+            'TerminateJobObject': ([w.HANDLE, w.UINT], w.BOOL),
+        }
+        for name, (arguments, result) in signatures.items():
+            function = getattr(self.api, name)
+            function.argtypes, function.restype = arguments, result
+        attributes = None
+        info = ProcessInfo()
+        try:
+            self._job = self.api.CreateJobObjectW(None, None) # Non-inheritable, unnamed.
+            self.check(self._job)
+            limits = ExtendedLimits()
+            limits.basic.flags = 0x2000 # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE; no breakaway flags.
+            self.check(self.api.SetInformationJobObject(self._job, 9, ctypes.byref(limits), ctypes.sizeof(limits)))
+            size = size_t()
+            self.api.InitializeProcThreadAttributeList(None, 1, 0, ctypes.byref(size))
+            if not size.value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            storage = ctypes.create_string_buffer(size.value)
+            self.check(self.api.InitializeProcThreadAttributeList(storage, 1, 0, ctypes.byref(size)))
+            attributes = storage
+            jobs = (w.HANDLE * 1)(self._job)
+            self.check(self.api.UpdateProcThreadAttribute(attributes, 0, 0x2000D, jobs,
+                                                          ctypes.sizeof(jobs), None, None))
+            startup = StartupInfoEx()
+            startup.startup.cb = ctypes.sizeof(startup)
+            startup.attributes = ctypes.cast(attributes, w.LPVOID)
+            command = ctypes.create_unicode_buffer(subprocess.list2cmdline(self.args))
+            executable = str(pathlib.Path(self.args[0]).resolve(strict=True))
+            self.check(self.api.CreateProcessW(executable, command, None, None, False,
+                       0x00080000 | 0x08000000, # EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW
+                       None, None, ctypes.byref(startup), ctypes.byref(info)))
+            self._handle, self.pid = info.process, info.pid
+            member = w.BOOL()
+            self.check(self.api.IsProcessInJob(self._handle, self._job, ctypes.byref(member)))
+            if not member.value:
+                raise RuntimeError('Test Firefox was not assigned to its lifetime job')
+            atexit.register(self.close)
+        except BaseException:
+            if self._handle is None and info.process:
+                self._handle = info.process
+            self.close()
+            raise
+        finally:
+            if info.thread:
+                self.api.CloseHandle(info.thread)
+            if attributes is not None:
+                self.api.DeleteProcThreadAttributeList(attributes)
+
+    @staticmethod
+    def check(result):
+        if not result:
+            raise ctypes.WinError(ctypes.get_last_error())
+        return result
+
+    def poll(self):
+        if self._handle is None:
+            return self.returncode
+        result = self.api.WaitForSingleObject(self._handle, 0)
+        if result == 258: # WAIT_TIMEOUT, still running.
+            return None
+        if result != 0:
+            raise ctypes.WinError(ctypes.get_last_error())
+        from ctypes import wintypes as w
+        code = w.DWORD()
+        self.check(self.api.GetExitCodeProcess(self._handle, ctypes.byref(code)))
+        self.returncode = code.value
+        return self.returncode
+
+    def wait(self, timeout):
+        if self._handle is None:
+            return self.returncode
+        result = self.api.WaitForSingleObject(self._handle, max(0, min(int(timeout * 1000), 0xFFFFFFFE)))
+        if result == 258:
+            raise subprocess.TimeoutExpired(self.args, timeout)
+        if result != 0:
+            raise ctypes.WinError(ctypes.get_last_error())
+        return self.poll()
+
+    def terminate(self):
+        if self._job is not None:
+            self.check(self.api.TerminateJobObject(self._job, 1))
+
+    def close(self):
+        atexit.unregister(self.close)
+        if self._job is not None:
+            self.check(self.api.CloseHandle(self._job))
+            self._job = None # Kernel stops the entire owned tree, including Firefox children.
+        if self._handle is not None:
+            try:
+                self.wait(8)
+            finally:
+                self.api.CloseHandle(self._handle)
+                self._handle = None
 
 
 class Firefox:
@@ -46,11 +200,9 @@ class Firefox:
         (profile / "user.js").write_text("\n".join(
             f"user_pref({json.dumps(k)}, {json.dumps(v)});" for k, v in prefs.items()
         ), encoding="utf8")
-        self.process = subprocess.Popen(
+        self.process = JobProcess(
             [executable, "-headless", "-no-remote", "-profile", str(profile),
              "-marionette", "--remote-allow-system-access", "about:blank"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         self.connection = None
         self.sequence = 0
@@ -176,17 +328,81 @@ class Firefox:
         raise AssertionError(f"Destination tab not found: {uri}")
 
     def close(self):
-        if self.connection:
-            try:
-                self.command("Marionette:Quit", {"flags": ["eForceQuit"]})
-            except (OSError, RuntimeError):
-                pass
-            self.connection.close()
         try:
-            self.process.wait(timeout=8)
-        except subprocess.TimeoutExpired:
-            self.process.terminate()
-            self.process.wait(timeout=8)
+            if self.connection:
+                try:
+                    self.command("Marionette:Quit", {"flags": ["eForceQuit"]})
+                except (OSError, RuntimeError):
+                    pass
+                finally:
+                    self.connection.close()
+                    self.connection = None
+        finally:
+            self.process.close()
+
+
+def job_driver(path):
+    """Dummy process tree for the bounded lifetime check; never starts Firefox."""
+    code = (
+        "import json,os,pathlib,subprocess,sys,time;"
+        "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(120)']);"
+        "path=pathlib.Path(sys.argv[1]);temporary=path.with_suffix('.tmp');"
+        "temporary.write_text(json.dumps([os.getpid(),child.pid]));temporary.replace(path);"
+        "time.sleep(120)"
+    )
+    process = JobProcess([sys.executable, '-c', code, str(path)])
+    try:
+        time.sleep(120)
+    finally:
+        process.close()
+
+
+def check_job_lifetime():
+    """Kill only our dummy driver and verify that its entire owned job exits."""
+    if os.name != 'nt':
+        raise OSError('The job lifetime check requires Windows 10+')
+    from ctypes import wintypes as w
+    api = ctypes.WinDLL('kernel32', use_last_error=True)
+    api.OpenProcess.argtypes, api.OpenProcess.restype = [w.DWORD, w.BOOL, w.DWORD], w.HANDLE
+    api.WaitForSingleObject.argtypes, api.WaitForSingleObject.restype = [w.HANDLE, w.DWORD], w.DWORD
+    api.TerminateProcess.argtypes, api.TerminateProcess.restype = [w.HANDLE, w.UINT], w.BOOL
+    api.CloseHandle.argtypes, api.CloseHandle.restype = [w.HANDLE], w.BOOL
+    with tempfile.TemporaryDirectory(prefix='ghost-job-test-') as folder:
+        path = pathlib.Path(folder) / 'owned-processes.json'
+        driver = subprocess.Popen([sys.executable, str(pathlib.Path(__file__).resolve()), '--job-driver', str(path)],
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  creationflags=subprocess.CREATE_NO_WINDOW)
+        handles = []
+        try:
+            deadline = time.monotonic() + 8
+            while not path.exists() and time.monotonic() < deadline and driver.poll() is None:
+                time.sleep(.02)
+            if not path.exists():
+                raise RuntimeError('Dummy job driver did not create its process tree')
+            pids = json.loads(path.read_text())
+            if not isinstance(pids, list) or len(pids) != 2 or any(type(pid) is not int or pid <= 0 for pid in pids):
+                raise RuntimeError('Invalid dummy process ownership record')
+            for pid in pids:
+                handle = api.OpenProcess(0x100001, False, pid) # SYNCHRONIZE | PROCESS_TERMINATE
+                JobProcess.check(handle)
+                handles.append(handle)
+            driver.terminate() # Deliberately bypass the dummy driver's Python cleanup.
+            driver.wait(timeout=5)
+            for handle in handles:
+                if api.WaitForSingleObject(handle, 5000) != 0:
+                    raise RuntimeError('Dummy descendant survived hard driver termination')
+            print('PASS: hard driver termination closes the job and stops both dummy descendants', flush=True)
+        finally:
+            try:
+                if driver.poll() is None:
+                    driver.terminate()
+                driver.wait(timeout=5)
+            finally:
+                for handle in handles:
+                    if api.WaitForSingleObject(handle, 0) == 258:
+                        api.TerminateProcess(handle, 1)
+                        api.WaitForSingleObject(handle, 5000)
+                    api.CloseHandle(handle)
 
 
 def run(f, folder):
@@ -519,7 +735,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--firefox", default="C:/Program Files/Mozilla Firefox/firefox.exe")
     parser.add_argument("--css", type=pathlib.Path, default=ROOT / "theme" / "userChrome.css")
+    parser.add_argument('--job-self-test', action='store_true', help='Check hard driver death using dummy processes, without Firefox')
+    parser.add_argument('--job-driver', type=pathlib.Path, help=argparse.SUPPRESS)
     options = parser.parse_args()
+    if options.job_driver is not None:
+        job_driver(options.job_driver)
+        raise SystemExit(0)
+    if options.job_self_test:
+        check_job_lifetime()
+        raise SystemExit(0)
     with tempfile.TemporaryDirectory(prefix="ghost-toolbar-test-") as directory:
         folder = pathlib.Path(directory)
         browser = Firefox(options.firefox, options.css, folder)

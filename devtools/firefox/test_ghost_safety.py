@@ -223,7 +223,7 @@ class BridgeTests(unittest.TestCase):
                     try:
                         while connection.recv(4096):
                             pass
-                    except ConnectionResetError:
+                    except (ConnectionResetError, ConnectionAbortedError):
                         pass
                 self.assertLess(time.monotonic() - started, 1.5)
             # Progress every 50ms must not reset the absolute header deadline.
@@ -237,7 +237,7 @@ class BridgeTests(unittest.TestCase):
                         break
                 try:
                     self.assertEqual(connection.recv(4096), b'')
-                except ConnectionResetError:
+                except (ConnectionResetError, ConnectionAbortedError):
                     pass
         self.assertEqual(self.calls, [])
         self.assertIn(b'200 OK', self.send(self.wire()))
@@ -257,6 +257,20 @@ class BootstrapTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows profile-lock API')
+    def test_windows_lock_blocks_begin_and_allows_closed_profile_recovery(self):
+        lock = self.profile / 'parent.lock'
+        with lock.open('wb'):
+            self.assertFalse(bootstrap.profile_closed(self.profile))
+            with self.assertRaisesRegex(RuntimeError, 'profile is locked'):
+                self.tx.begin(self.settings)
+            self.assertFalse(self.tx.directory.exists())
+            self.assertEqual((self.profile / 'prefs.js').read_bytes(), self.original)
+        self.assertTrue(bootstrap.profile_closed(self.profile))
+        self.tx.begin(self.settings)
+        self.tx.recover(True)
+        self.assert_restored()
 
     def applied(self):
         (self.profile / 'prefs.js').write_text(

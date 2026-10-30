@@ -2,7 +2,7 @@
 
 Date: 2026-10-30
 
-Status: focused source review completed; runtime validation remains pending. No release or complete product security assurance is implied.
+Status: focused source review completed, followed by Windows CI regression validation. No complete product security assurance is implied.
 
 ## Scope
 
@@ -33,8 +33,8 @@ The current product installer, Windows companion, third-party extensions and bro
 
 ## Evidence and limits
 
-Source checks include Python AST parsing and compilation without execution, preservation-guard inspection, import/startup/cleanup control-flow review, shared-guard/client tracing, private-data boundary checks and release-manifest inspection. The regression suite contains 24 prepared test methods, including both real profile-driver entry points with mocked Firefox.
+Source checks include Python AST parsing and compilation without execution, preservation-guard inspection, import/startup/cleanup control-flow review, shared-guard/client tracing, private-data boundary checks and release-manifest inspection. The regression suite includes both real profile-driver entry points with mocked Firefox.
 
-No target modules, tests, browsers or servers were executed in this review. The available host lacks the required combined network/filesystem/resource isolation. Windows lock behavior and real Firefox behavior remain unverified. The source-only commit uses `[skip ci]` so that existing unrestricted test workflows do not execute target code as an unintended consequence of this push. Skipped checks are not passing checks.
+The initial review was source-only. Subsequent release validation on 2026-10-30 passed all 24 then-existing helper fixtures, both installer PowerShell variants, companion checks, package installation and the dummy process-tree lifetime check: [Windows CI](https://github.com/DekrovDev/firefox-ghost-ui/actions/runs/41092033087). The suite now also includes an artificial Windows profile-lock fixture, bringing its total to 25. Checks run on disposable GitHub-hosted Windows VMs under the project owner's explicit authorization; the stricter initial audit sandbox requirements were not silently treated as satisfied by a standard VM. Real Firefox UI and browser-origin exploitability remain separate validation questions.
 
 Content and file-identity comparisons are not atomic filesystem transactions against concurrent same-user edits. Abruptly killing the bridge server itself is not covered by the parent-pipe cleanup mechanism. Port reservation is released before Firefox binds; the familiar ephemeral-port race is not eliminated. Recovery can require manual action if Firefox remains running, bootstrap content was edited, preferences conflict or writes fail. CSS/storage/tab rollback is not automatic. No claim of an error-free build or an exhaustive audit is made.
