@@ -35,6 +35,12 @@ jobs:
       - name: Package installation, links and checksum
         shell: powershell
         run: ./tests/Package.Tests.ps1
+      - name: Test-driver process lifetime
+        shell: powershell
+        run: python ./tests/Toolbar.Tests.py --job-self-test
+      - name: Development helper regression fixtures
+        shell: powershell
+        run: python -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-package

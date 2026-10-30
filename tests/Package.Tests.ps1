@@ -50,6 +50,8 @@ try {
     Import-Module (Join-Path $package 'scripts\GhostUI.psm1') -Force -DisableNameChecking
     Import-Module (Join-Path $package 'scripts\Handles.psm1') -Force -DisableNameChecking
     Install-GhostUI $profile (Join-Path $package 'theme') | Out-Null
+    $profileState = [IO.File]::ReadAllText((Join-Path $profile 'chrome\ghost-ui\state.json')) | ConvertFrom-Json
+    if ($profileState.version -cne $version) { throw 'Installed profile version differs from packaged VERSION.' }
     $installed = Install-GhostHandles -ProfilePath $profile -InstallRoot (Join-Path $sandbox 'companion') -StartupRegistryPath $registry -NoStart
     if (-not (Test-Path -LiteralPath $installed.Executable)) { throw 'Packaged source did not compile into installed executable.' }
     if (-not (Test-Path -LiteralPath (Join-Path $profile 'chrome\ghost-ui\userChrome.css'))) { throw 'Packaged theme did not install.' }

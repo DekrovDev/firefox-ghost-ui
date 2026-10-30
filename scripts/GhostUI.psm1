@@ -1,6 +1,7 @@
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
-$script:Version = '1.1.0'
+$script:Version = [IO.File]::ReadAllText((Join-Path (Split-Path $PSScriptRoot -Parent) 'VERSION')).Trim()
+if ($script:Version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Invalid Ghost UI VERSION.' }
 $script:PreferenceValues = [ordered]@{
     'toolkit.legacyUserProfileCustomizations.stylesheets' = $true
     'sidebar.revamp' = $true
