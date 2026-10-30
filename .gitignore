@@ -6,3 +6,6 @@ test-output/
 backups/
 state.json
 __pycache__/
+.opencode/
+*.pyc
+devtools/firefox/.local/
