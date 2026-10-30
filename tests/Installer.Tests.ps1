@@ -35,7 +35,7 @@ function Test-CombinedInstallerRollback {
     # default in that copy so top-level entry points never touch a real Run key.
     $fixture = Join-Path $sandbox 'combined installer'
     [IO.Directory]::CreateDirectory($fixture) | Out-Null
-    foreach ($name in @('Install.ps1','Uninstall.ps1','scripts','theme','companion')) {
+    foreach ($name in @('Install.ps1','Uninstall.ps1','VERSION','scripts','theme','companion')) {
         Copy-Item -LiteralPath (Join-Path $root $name) -Destination $fixture -Recurse
     }
     $testRegistry = 'HKCU:\Software\FirefoxGhostUI-CombinedTests-' + [Guid]::NewGuid().ToString('N')
