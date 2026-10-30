@@ -31,7 +31,7 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 - Native window buttons revealed by hovering at the top-right corner.
 - External window grips for native dragging; **Ctrl+Alt+F9** starts keyboard movement and **Ctrl+Alt+F10** recovers an offscreen window.
 - Controls hide in F11/video fullscreen; reduced motion is supported. Exit fullscreen before window recovery.
-- Optional Bonjourr styling and animations, with colors supplied by Adaptive Tab Bar Colour.
+- Optional Bonjourr styling and animations that preserve your startpage settings.
 
 ## Quick install
 
@@ -50,13 +50,13 @@ To update, extract the newer release, close Firefox and run **Install.cmd**. The
 
 To uninstall, close Firefox and run **Uninstall.cmd**. Original managed files and preference values are restored while other current preferences are retained; backups remain in the profile's `chrome/ghost-ui-backups/` folder. Managed file edits block update/uninstall: save your edits or restore the managed file first. [Profile safety](docs/technical.md#profile-safety).
 
-## Extensions and the complete look
+## Bonjourr integration
 
-Extensions are **installed separately** from official sources and are not bundled:
+[Bonjourr](https://bonjourr.fr/) is created by **[Tahoe Beetschen (morceaudebois)](https://github.com/morceaudebois)** and **[Victor Azevedo (victrme)](https://github.com/victrme)**. Tahoe gave permission for this compatibility integration, with attribution, separate installation and removal on request. Thank you for supporting the project! [Original Bonjourr source](https://github.com/victrme/Bonjourr).
+
+Bonjourr is optional and **installed separately** from its official source; it is not bundled with Ghost UI.
 
 - [Bonjourr](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/) provides the screenshot's wallpaper, clock, weather and central search. Configure it yourself, then close Firefox and rerun **Install.cmd** for Ghost UI animations. Existing settings are preserved.
-- [Adaptive Tab Bar Colour](https://addons.mozilla.org/firefox/addon/adaptive-tab-bar-colour/) matches browser colors to the website.
-- [Ambient Light for YouTube](https://addons.mozilla.org/firefox/addon/ambient-light-for-youtube/) adds optional lighting around videos.
 
 For Bonjourr at startup, choose it under both **Homepage and new windows** and **New tabs** in **Settings > Home**. The installer preserves homepage and session-restore preferences.
 
@@ -69,4 +69,4 @@ For Bonjourr at startup, choose it under both **Homepage and new windows** and *
 
 ## License and credits
 
-[MIT](LICENSE) for Ghost UI's own code. This is an independent Firefox customization. [Bonjourr](https://bonjourr.fr/) and the linked extensions are separate projects with their own licenses; see [authors and sources](docs/technical.md#third-party-credits).
+[MIT](LICENSE) for Ghost UI's own code. This is an independent Firefox customization. [Bonjourr](https://bonjourr.fr/) is a separate project with its own license; see [authors and sources](docs/technical.md#third-party-credits).

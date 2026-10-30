@@ -19,7 +19,7 @@
 - The hidden toolbar passes clicks through outside its visible center pill and 3-pixel top-edge activation strip. Window controls have a separate activation strip at the top right (16 pixels in a restored window, 8 when maximized).
 - The floating navigation rectangle is excluded from native window dragging, including when transparent. Its empty space no longer serves as a window-drag handle.
 - F11 and fullscreen video hide the floating controls and sidebar.
-- Supports reduced motion and Adaptive Tab Bar Colour theme colors.
+- Supports reduced motion and Firefox theme colors.
 - Optional Bonjourr animations preserve its wallpaper, search, links, and settings.
 
 ## Controlled preferences and files
@@ -105,6 +105,8 @@ Publishing requires an intentional real `vX.Y.Z` tag matching `VERSION`. The rel
 ## Third-party credits
 
 [Bonjourr](https://bonjourr.fr/) is created by **[Tahoe Beetschen (morceaudebois)](https://github.com/morceaudebois)** and **[Victor Azevedo (victrme)](https://github.com/victrme)**, with help from its [contributors](https://github.com/victrme/Bonjourr/graphs/contributors). Thank you to its authors and community for the startpage used in this setup.
+
+Tahoe gave permission for the Ghost UI compatibility integration on the basis of author attribution and official links, separate installation without redistributing Bonjourr, and removal of the integration on request. This permission does not imply an official partnership or change Bonjourr's license.
 
 - [Official website](https://bonjourr.fr/)
 - [Original source code — victrme/Bonjourr](https://github.com/victrme/Bonjourr)
