@@ -1,10 +1,8 @@
 # Firefox Ghost UI
 
-[Download for Windows](https://github.com/DekrovDev/firefox-ghost-ui/releases/latest) · [Report an issue](https://github.com/DekrovDev/firefox-ghost-ui/issues)
+A floating Firefox toolbar, hover sidebar and adaptive Windows window grips that keep browser controls within reach while leaving more room for the page.
 
-A floating Firefox toolbar that stays out of the way, with native vertical tabs and optional Bonjourr animations.
-
-**Extensions play a major role in the appearance.** Ghost UI provides the floating controls, sidebar layout and animations; the [extensions below](#extensions-and-the-complete-look) add the new-tab background and widgets, adaptive browser colors, and optional lighting around YouTube videos. Configure them alongside the theme to get the complete look.
+[Download Latest](https://github.com/DekrovDev/firefox-ghost-ui/releases/latest) | [Documentation](docs/technical.md) | [Report Issue](https://github.com/DekrovDev/firefox-ghost-ui/issues)
 
 ![Firefox Ghost UI with a clean new tab, central search and a collapsed sidebar](docs/images/new-tab.png)
 
@@ -27,147 +25,48 @@ Screenshots use an English demo profile with optional [Bonjourr](https://addons.
 
 ## Features
 
-- Hover anywhere along the usable top edge, or over the visible center pill. Opening starts after **120 ms** and the controls appear within about half a second.
-- Briefly crossing the edge on the way to a page header does not enable an invisible toolbar. After deliberate hovering, a growing hit area follows the visible glass so you can move into it while it opens. Controls become clickable as they appear; the full toolbar area activates after opening completes. The activation strip and center pill keep their size.
-- **Ctrl+L** opens the address bar immediately.
-- After you submit a search, the toolbar collapses when editing ends and suggestions close. A saved query no longer keeps it open.
-- Menus, extension popups, and active typing keep the toolbar available. Button hit areas and popup anchors stay stationary during animations; only their artwork moves. Opening a popup cancels the icon stagger immediately.
-- Moving away keeps all controls visible for **2 seconds**, then fades them together. Returning cancels closing. Submitting an address skips this wait and plays a short fade and collapse animation (about 0.3 seconds).
-- A native bookmarks menu button opens your saved sites. Sites from the old bookmarks bar are under **Bookmarks Toolbar** in that menu.
-- Downloads appear in a separate floating island. An arrow settles into its tray above a thin progress track; on completion, the same track smoothly folds into a check as the arrow fades away. It appears briefly when a download starts, retracts while the download continues, and appears again on completion; hovering or opening its list keeps it available. Click the island to view files without revealing the address bar. Download warnings remain accessible; reduced motion uses a static completion check.
-- Native window buttons stay hidden until you hover over the top-right corner: a 16-pixel strip in a restored window, or 8 pixels when maximized. The larger restored-window strip extends below the native resize frame. They fade in independently of the toolbar, stay available while you use them, and hide after you leave. Hidden buttons pass clicks through to the page below the activation strip.
-- The sidebar expands on hover over the page, without shifting the page. While a side tool is open, tabs stay in a compact icon rail so its controls remain visible and stationary. Closing the tool restores normal hover expansion. Passive tab previews do not reveal the toolbar.
-- The hidden toolbar passes clicks through outside its visible center pill and 3-pixel top-edge activation strip. Window controls have a separate activation strip at the top right (16 pixels in a restored window, 8 when maximized).
-- The floating navigation rectangle is excluded from native window dragging, including when transparent. Its empty space no longer serves as a window-drag handle.
-- F11 and fullscreen video hide the floating controls and sidebar.
-- Supports reduced motion and Adaptive Tab Bar Colour theme colors.
-- Optional Bonjourr animations preserve its wallpaper, search, links, and settings.
+- Floating navigation toolbar: hover at the top edge or pill, or press **Ctrl+L** to search immediately.
+- Native vertical tabs in a sidebar that expands over the page without shifting it.
+- A separate download island with progress, completion feedback and Firefox's file list.
+- Native window buttons revealed by hovering at the top-right corner.
+- External window grips for native dragging; **Ctrl+Alt+F9** starts keyboard movement and **Ctrl+Alt+F10** recovers an offscreen window.
+- Controls hide in F11/video fullscreen; reduced motion is supported. Exit fullscreen before window recovery.
+- Optional Bonjourr styling and animations, with colors supplied by Adaptive Tab Bar Colour.
 
-## Install automatically on Windows
+## Quick install
 
-### Adaptive window grips (v1.1.0)
-
-A small Windows companion reveals a grip outside a restored Firefox window after the pointer approaches a visible edge for about 100 ms. The grip stays stationary and starts Windows' native move operation on left press. It does not cover or shift the website, or replace the native resize border. Partly offscreen windows retain their available grips without hovering. Placement respects monitor work areas and gaps.
-
-**Ctrl+Alt+F9** starts keyboard window movement (restoring a maximized window first). **Ctrl+Alt+F10** returns the window to the monitor under the pointer, including completely lost or oversized windows. F11/video fullscreen remains untouched; exit fullscreen first. After display changes, completely offscreen restored windows return without taking focus. The tray menu provides pause, move, return and exit. The companion starts at Windows sign-in and serves Firefox windows in the current Windows session; it does not read browser content or inject code.
-
-A separate **↩ Firefox** return capsule stays available when a clipped window loses focus, or when Firefox is completely offscreen. Clicking it restores that window without first activating it. This exceptional topmost recovery control can briefly overlap another normal application's chrome; normal drag grips stay outside the website. It is suppressed over fullscreen applications.
-
-For an existing theme installation, run `./Install-Handles.ps1 -ProfilePath 'full Firefox profile path'` without restarting Firefox. Geometry and isolated installer tests are automated. The user confirmed that a grip appears, moves Firefox while held, and stops on release. **Full native regression remains pending:** Computer Use blocks this browser's URL enforcement, and capture of a separate test window timed out. See [behavior and verification](docs/adaptive-handles.md).
-
-### Theme and companion installation
+**Windows only as verified.** Normal installation needs no administrator access, Git, Python or extra PowerShell modules. See [tested versions and limits](docs/technical.md#verification-scope).
 
 1. Install desktop Firefox and open it once to create a profile.
-2. [Download the latest Windows ZIP](https://github.com/DekrovDev/firefox-ghost-ui/releases/latest), then **extract the entire archive**.
-3. Double-click **Install.cmd**. If you have multiple profiles, choose the one you use.
-4. Close Firefox normally when asked, then press Enter in the installer.
-5. Start Firefox.
+2. [Download the latest Windows ZIP](https://github.com/DekrovDev/firefox-ghost-ui/releases/latest) and **extract the entire archive**.
+3. Double-click **Install.cmd** and choose your Firefox profile if asked.
+4. Close Firefox normally when requested, press Enter in the installer, then start Firefox again.
 
-No administrator access, Git, Python, or additional PowerShell modules are needed. The installer uses Windows PowerShell 5.1 already included with Windows. It operates locally and saves backups before writing files. The CMD launcher permits this script for its own process only; it does not change the machine's execution policy.
+The installer saves backups and preserves existing settings. It installs a per-user Windows companion that starts at sign-in, supplies grips and recovery shortcuts, and offers pause, move, return and exit in its tray menu. It does not read browser content or inject code into pages. [Companion setup and limitations](docs/adaptive-handles.md).
 
-**Compatibility:** the original visual checks used Firefox **156.0.1 for Windows**. Targeted download checks used 157.0.1; native toolbar regression checks use 158.0, as described below. Installer checks run on Windows PowerShell 5.1 and PowerShell 7. Other operating systems have not been verified.
+## Update and uninstall
+
+To update, extract the newer release, close Firefox and run **Install.cmd**. The original pre-install backup is preserved; managed configuration blocks are not duplicated.
+
+To uninstall, close Firefox and run **Uninstall.cmd**. Original managed files and preference values are restored while other current preferences are retained; backups remain in the profile's `chrome/ghost-ui-backups/` folder. Managed file edits block update/uninstall: save your edits or restore the managed file first. [Profile safety](docs/technical.md#profile-safety).
 
 ## Extensions and the complete look
 
-For a setup close to the screenshots, use **Bonjourr** for the new-tab page and **Adaptive Tab Bar Colour** for browser colors that blend with the current website. **Ambient Light for YouTube** adds an optional video effect. Ghost UI also works on its own; the extensions contribute these parts of the appearance:
+Extensions are **installed separately** from official sources and are not bundled:
 
-- [Bonjourr](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/) — the wallpaper or video background, clock, weather, greeting, quotes, quick links and central search on the new-tab page. These are configured in Bonjourr. After installing it, close Firefox and run **Install.cmd again** to apply Ghost UI's animations automatically. Enable its search widget if you want central search.
-- [Adaptive Tab Bar Colour](https://addons.mozilla.org/firefox/addon/adaptive-tab-bar-colour/) — matches Firefox's theme colors to the current website. Ghost UI uses those colors for its surfaces, helping the floating toolbar and sidebar blend with the page. Recommended for the adaptive color effect.
-- [Ambient Light for YouTube](https://addons.mozilla.org/firefox/addon/ambient-light-for-youtube/) — adds lighting around YouTube videos based on the image being played. It enhances the video page and is optional for the rest of the browser layout.
+- [Bonjourr](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/) provides the screenshot's wallpaper, clock, weather and central search. Configure it yourself, then close Firefox and rerun **Install.cmd** for Ghost UI animations. Existing settings are preserved.
+- [Adaptive Tab Bar Colour](https://addons.mozilla.org/firefox/addon/adaptive-tab-bar-colour/) matches browser colors to the website.
+- [Ambient Light for YouTube](https://addons.mozilla.org/firefox/addon/ambient-light-for-youtube/) adds optional lighting around videos.
 
-Firefox asks you to confirm extension installation. Ghost UI does not bundle extensions or bypass that confirmation. Your existing Bonjourr settings are preserved; no personal wallpaper, location, account, or links are imported from this project.
+For Bonjourr at startup, choose it under both **Homepage and new windows** and **New tabs** in **Settings > Home**. The installer preserves homepage and session-restore preferences.
 
-To show Bonjourr when Firefox starts or opens a new window, open **Settings → Home** and select **Bonjourr** under **Homepage and new windows** as well as **New tabs**. These are separate settings: choosing Bonjourr for new tabs alone can leave Firefox Home at startup, which looks empty if its widgets are disabled. The installer preserves your homepage and session-restore preferences.
+## Troubleshooting and advanced docs
 
-## Bonjourr credits and official sources
+- [Extensions panel closes immediately: optional workaround](docs/extensions-panel-workaround.md)
+- [Window grips, recovery, DPI and tray controls](docs/adaptive-handles.md)
+- [Technical reference: profiles, preferences, toolbar and development](docs/technical.md)
+- [Release history](https://github.com/DekrovDev/firefox-ghost-ui/releases)
 
-[Bonjourr](https://bonjourr.fr/) is created by **[Tahoe Beetschen (morceaudebois)](https://github.com/morceaudebois)** and **[Victor Azevedo (victrme)](https://github.com/victrme)**, with help from its [contributors](https://github.com/victrme/Bonjourr/graphs/contributors). Thank you to its authors and community for the startpage used in this setup.
+## License and credits
 
-- [Official website](https://bonjourr.fr/)
-- [Original source code — victrme/Bonjourr](https://github.com/victrme/Bonjourr)
-- [Official documentation](https://bonjourr.fr/docs/)
-- [Install Bonjourr for Firefox — Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/)
-
-Bonjourr provides the new-tab backgrounds, clock, weather, greeting, quotes, quick links and central search shown in this setup. Firefox Ghost UI adds its own optional CSS styling and animations for compatibility with that page. **Bonjourr is installed separately from the official source; the extension itself is not redistributed or bundled with the Ghost UI installer.**
-
-Bonjourr has its own [GPL-3.0 license](https://github.com/victrme/Bonjourr/blob/master/LICENSE.md). The MIT license in this repository applies to Ghost UI's own code.
-
-## Update or uninstall
-
-To update, download a newer release, extract it, close Firefox, and run **Install.cmd**. Reinstalling preserves the original pre-install backup and does not duplicate configuration blocks.
-
-To remove Ghost UI, close Firefox and run **Uninstall.cmd**. It restores your original `userChrome.css`, `userContent.css`, `user.js`, and the previous values of the seven Firefox preferences this installer manages. Other current preferences are retained. Backups remain inside the selected profile's `chrome/ghost-ui-backups/` folder.
-
-If a managed file has been manually edited, update/uninstall stops before overwriting it. Save those edits or restore the managed file first; your original backups remain available for manual recovery.
-
-## What the installer changes
-
-- Copies the theme into `chrome/ghost-ui/` in the selected profile.
-- Uses CSS import wrappers, keeping existing custom CSS in the same `chrome/` directory so relative assets and imports still resolve. A previous manually installed Ghost UI is backed up and replaced instead of loaded twice.
-- Adds a managed block to `user.js`:
-
-| Preference | Installed value |
-| --- | --- |
-| `toolkit.legacyUserProfileCustomizations.stylesheets` | `true` |
-| `sidebar.revamp` | `true` |
-| `sidebar.verticalTabs` | `true` |
-| `sidebar.visibility` | `expand-on-hover` |
-| `browser.tabs.inTitlebar` | `1` |
-| `browser.download.alwaysOpenPanel` | `false` |
-| `browser.download.panel.shown` | `true` |
-
-- If Bonjourr's extension UUID exists in this profile, adds `userContent.css` scoped to that exact extension URL. No other pages or extensions receive these styles.
-
-The installer adds the native bookmarks menu button if it is absent, preserving existing toolbar placements. Uninstall removes only this addition and keeps later toolbar changes. A preexisting button or a layout enforced through `user.js` is left as configured; you can add **Bookmarks Menu** manually through Customize Toolbar.
-
-The installer does not write bookmark/history databases, replace the rest of your preferences, install add-ons, or terminate Firefox processes. Competing custom browser styles may need adjustment. Microsoft Store profiles or nonstandard locations can be selected explicitly with `-ProfilePath`.
-
-
-The download island uses Firefox’s native **Downloads** button in the navigation toolbar. If you moved it into the overflow menu, move it back using **Customize Toolbar**. The installer disables automatic opening of the file list (including the first-download introduction); uninstall restores both previous download-panel settings.
-
-## Advanced usage
-
-```powershell
-./Install.ps1 -ProfilePath 'D:\Firefox Profiles\Personal' -NoPrompt
-./Uninstall.ps1 -ProfilePath 'D:\Firefox Profiles\Personal' -NoPrompt
-```
-
-Firefox must be closed first. Without an explicit path, `-NoPrompt` selects the only profile or a unique installation default; otherwise it stops rather than guessing.
-
-To adjust the hover delay, edit `--ghost-open-wait` in `theme/userChrome.css` **before** installing. If you edit already installed files, save your changes before using the installer again.
-
-## Troubleshooting
-
-### Extensions panel flashes or does not open from the menu
-
-If **☰ → Extensions** closes the menu but does not open a lasting extensions panel, [this optional CSS workaround](docs/extensions-panel-workaround.md) may help. The affected user confirmed it on Firefox 158.0.1 for Windows with the extensions button set to auto-hide. The guide includes the exact rule, backup and rollback steps, and its verification limits. Apply it only if you encounter the symptom.
-
-## Development
-
-```powershell
-./tests/Installer.Tests.ps1
-./tests/Handles.Tests.ps1
-./scripts/Build-Release.ps1 -Version 1.1.0
-```
-
-The tests use disposable profiles only and cover first install, updates, existing CSS and preferences, Bonjourr scoping, rollback, uninstall, profile selection, and protection of edited files. The release builder packages an explicit file list and generates SHA-256 checksums; profiles, personal backups, diagnostics, and Git metadata are excluded.
-
-The browser behavior was also checked with real mouse/keyboard actions on Firefox 156.0.1: Ctrl+L, Enter, menus, extension popups, sidebar overlay, adaptive colors, fullscreen, customization, reduced motion, and native window commands at multiple window sizes.
-
-The download-island changes in **1.0.9** were additionally checked on **Firefox 157.0.1 for Windows**: real downloads, brief start/finish notices, file-list clicks, safety badges, reduced motion and alignment at 100%, 125% and 150% scaling. These are targeted download checks; the earlier full-interface checks above used 156.0.1.
-
-**1.0.11** keeps native menu anchors stationary and places the glass surface behind the controls. It fixes a regression in 1.0.10 where that surface intercepted toolbar clicks. Native toolbar checks on **Firefox 158.0 for Windows** use a disposable headless profile:
-
-```powershell
-python ./tests/Toolbar.Tests.py --firefox 'C:/Program Files/Mozilla Firefox/firefox.exe'
-```
-
-Toolbar clicks now verify the topmost hit target and use pointer coordinates. The earlier direct element-click checks missed the glass interception. Native XUL popup items use element clicks because their separate widget is not returned by the main document's headless hit test. The tests check menu and extension popup opening, holding and reopening, extension actions, menu subviews, the actual extensions-manager and settings tabs, navigation, keyboard address focus, find in page, smaller windows and hidden-toolbar click-through. Actual downloads were also checked with normal and reduced motion. These checks do not cover personal extension configuration, account sign-in or operating-system dialogs. The earlier reported instant disappearance after selecting Extensions in the menu was not reproduced in this isolated profile; the later blocked-toolbar regression was reproduced and fixed.
-
-MIT license. Firefox, Bonjourr, and the linked extensions are separate projects; this is an independent customization.
-
-**1.0.12** restores the short animated collapse after submitting an address: Firefox's native transition previously overrode the submission marker. The usual two-second hover grace remains. The address field now keeps at least 120 pixels in a narrow window, letting Firefox move optional buttons into its overflow menu. Submission animations are disabled during toolbar customization and fullscreen. The expanded suite passes 67 checks, including real local-page submission, visible fade frames, reduced motion, immediate customization, narrow windows, side-tool hit targets and native fullscreen. An additional 85 coordinate clicks passed through the hidden toolbar, and the overflow menu was opened by a coordinate click in a narrow window.
-
-**1.0.13** fixes page-header clicks blocked after briefly touching the top edge. Static checks in 1.0.12 missed this trajectory: the invisible nav rectangle became clickable immediately and sustained its own hover. Opening now confirms hover intent, bridges into the visible glass and delays full-area interaction. The suite passes 96 checks, adding coordinate clicks on four page-header controls after 10 ms and 50 ms edge crossings, cancellation, early entry into the growing shell and activation through the unchanged pill. These run in the same disposable headless Firefox; they do not simulate the user's personal session.
-
-**1.0.14** explicitly disables native window dragging on the floating navigation rectangle. Firefox assigns it the `browser-titlebar` class with a native drag rule; disabling pointer events alone did not remove that separate source of Windows click interception. Toolbar dimensions, activation areas and reveal animations are unchanged. Empty navigation background is no longer a window-drag handle. The 96 headless regression checks cover toolbar behavior, but do not test Windows non-client hit testing; confirmation of the reported website symptom requires a normal Firefox window after restart.
+[MIT](LICENSE) for Ghost UI's own code. This is an independent Firefox customization. [Bonjourr](https://bonjourr.fr/) and the linked extensions are separate projects with their own licenses; see [authors and sources](docs/technical.md#third-party-credits).
