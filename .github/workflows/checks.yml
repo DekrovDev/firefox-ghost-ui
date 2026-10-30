@@ -16,17 +16,22 @@ jobs:
         shell: powershell
         run: ./tests/Installer.Tests.ps1
       - name: PowerShell 7
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: ./tests/Installer.Tests.ps1
       - name: Adaptive window grips
+        if: ${{ !cancelled() }}
         shell: powershell
         run: ./tests/Handles.Tests.ps1
       - name: Packaged installation
+        if: ${{ !cancelled() }}
         shell: powershell
         run: ./tests/Package.Tests.ps1
       - name: Test-driver process lifetime
+        if: ${{ !cancelled() }}
         shell: powershell
         run: python ./tests/Toolbar.Tests.py --job-self-test
       - name: Development helper regression fixtures
+        if: ${{ !cancelled() }}
         shell: powershell
         run: python -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v

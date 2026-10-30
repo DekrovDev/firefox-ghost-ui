@@ -45,6 +45,7 @@ function Test-CombinedInstallerRollback {
     Assert ($moduleText.Contains($realRun)) 'Fixture redirects the exact production startup default'
     Write-TestFile $modulePath ($moduleText.Replace($realRun, $testRegistry))
     $oldLocalAppData = $env:LOCALAPPDATA
+    $fixtureJunctions = @()
     try {
         foreach ($isUpdate in @($false, $true)) {
             $name = if ($isUpdate) { 'update' } else { 'first install' }
@@ -66,9 +67,10 @@ function Test-CombinedInstallerRollback {
             [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($handlesRoot)) | Out-Null
             $destination = Join-Path $fixture ($name + ' redirected target')
             [IO.Directory]::CreateDirectory($destination) | Out-Null
+            $fixtureJunctions += $handlesRoot
             New-Item -ItemType Junction -Path $handlesRoot -Target $destination | Out-Null
             $result = Invoke-TestInstaller (Join-Path $fixture 'Install.ps1') $profile
-            Assert ($result.ExitCode -eq 1 -and $result.Output -match 'Profile rollback completed') ('Helper failure reports rollback: ' + $name)
+            Assert ($result.ExitCode -eq 1 -and $result.Output -match 'Profile rollback completed') ('Helper failure reports rollback: ' + $name + ': ' + $result.Output)
             foreach ($file in $files) {
                 $path = Join-Path $profile $file
                 $after = if ([IO.File]::Exists($path)) { (Get-FileHash -LiteralPath $path).Hash } else { $null }
@@ -92,6 +94,14 @@ function Test-CombinedInstallerRollback {
             $prefix = [IO.Path]::GetFullPath($fixture).TrimEnd('\') + '\'
             foreach ($owned in @(Get-Process -Name GhostHandles -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })) {
                 Stop-GhostHandles $owned.Path
+            }
+            foreach ($link in $fixtureJunctions) {
+                $absoluteLink = [IO.Path]::GetFullPath($link)
+                if (-not $absoluteLink.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe fixture junction refused.' }
+                if ([IO.Directory]::Exists($absoluteLink)) {
+                    if (-not ((Get-Item -LiteralPath $absoluteLink -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Fixture junction was replaced; cleanup refused.' }
+                    [IO.Directory]::Delete($absoluteLink, $false) # Unlink only, never recurse into the target.
+                }
             }
         } finally {
             $env:LOCALAPPDATA = $oldLocalAppData
@@ -303,6 +313,9 @@ try {
 
     Test-CombinedInstallerRollback
     Write-Host "PASS: $script:Passed installer assertions (PowerShell $($PSVersionTable.PSVersion))."
+} catch {
+    Write-Host ('Installer assertions failed: ' + $_.Exception.Message)
+    throw
 } finally {
     # The only recursive cleanup target is the unique test directory created above.
     $resolved = [IO.Path]::GetFullPath($sandbox)
