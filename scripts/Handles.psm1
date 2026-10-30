@@ -57,7 +57,7 @@ function Write-HandlesState([string]$Root, $State) {
         $bytes = if ($State -is [byte[]]) { $State } else { [Text.UTF8Encoding]::new($false).GetBytes(($State | ConvertTo-Json -Depth 8)) }
         $stream = [IO.File]::Open($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        if (Test-Path -LiteralPath $path) { [IO.File]::Replace($temporary, $path, $null) }
+        if (Test-Path -LiteralPath $path) { [IO.File]::Replace($temporary, $path, [NullString]::Value) }
         else { [IO.File]::Move($temporary, $path) }
     } finally { if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) } }
 }

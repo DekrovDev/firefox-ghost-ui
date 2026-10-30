@@ -223,7 +223,7 @@ class BridgeTests(unittest.TestCase):
                     try:
                         while connection.recv(4096):
                             pass
-                    except ConnectionResetError:
+                    except (ConnectionResetError, ConnectionAbortedError):
                         pass
                 self.assertLess(time.monotonic() - started, 1.5)
             # Progress every 50ms must not reset the absolute header deadline.
@@ -237,7 +237,7 @@ class BridgeTests(unittest.TestCase):
                         break
                 try:
                     self.assertEqual(connection.recv(4096), b'')
-                except ConnectionResetError:
+                except (ConnectionResetError, ConnectionAbortedError):
                     pass
         self.assertEqual(self.calls, [])
         self.assertIn(b'200 OK', self.send(self.wire()))
