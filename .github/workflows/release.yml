@@ -10,55 +10,9 @@ concurrency:
 jobs:
   validate:
     if: github.repository == 'DekrovDev/firefox-ghost-ui'
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Validate real tag against VERSION
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $version = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'VERSION')).Trim()
-          if ($version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Invalid VERSION.' }
-          if ($env:GITHUB_REF -cne "refs/tags/v$version") { throw 'Tag must match VERSION.' }
-      - name: Require versioned English release summary
-        shell: powershell
-        run: ./scripts/Write-ReleaseNotes.ps1
-      - name: Release summary fixtures
-        shell: powershell
-        run: ./tests/ReleaseNotes.Tests.ps1
-      - name: Installer on Windows PowerShell 5.1
-        shell: powershell
-        run: ./tests/Installer.Tests.ps1
-      - name: Installer on PowerShell 7
-        shell: pwsh
-        run: ./tests/Installer.Tests.ps1
-      - name: Adaptive window grips
-        shell: powershell
-        run: ./tests/Handles.Tests.ps1
-      - name: Package installation, links and checksum
-        shell: powershell
-        run: ./tests/Package.Tests.ps1
-      - name: Build release notes from changelog
-        shell: powershell
-        run: ./scripts/Write-ReleaseNotes.ps1 -OutputPath ./dist/RELEASE_NOTES.md
-      - name: Test-driver process lifetime
-        shell: powershell
-        run: python ./tests/Toolbar.Tests.py --job-self-test
-      - name: Development helper regression fixtures
-        shell: powershell
-        run: python -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: release-package
-          path: |
-            dist/firefox-ghost-ui-*-windows.zip
-            dist/SHA256SUMS.txt
-            dist/RELEASE_NOTES.md
-          if-no-files-found: error
-          retention-days: 1
+    uses: ./.github/workflows/checks.yml
+    permissions:
+      contents: read
   publish:
     needs: validate
     runs-on: windows-latest

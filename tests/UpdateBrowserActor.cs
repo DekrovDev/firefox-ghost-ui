@@ -29,6 +29,13 @@ namespace GhostUI {
                         var command = UpdateRules.Json().Deserialize<System.Collections.Generic.Dictionary<string, object>>(UpdateStore.ReadSmall(commandPath, 4096));
                         File.Delete(commandPath); acknowledged = Convert.ToInt32(command["id"]);
                         switch ((string)command["action"]) {
+                            case "open-settings": card.OpenSettings(); break;
+                            case "enable-checks": card.AutoCheck.Checked = true; break;
+                            case "profile-current":
+                                var profiles = (UpdateProfile[])Field(controller, "profiles");
+                                if (profiles.Length != 1) throw new InvalidDataException("Expected one disposable profile.");
+                                File.WriteAllText(Path.Combine(profiles[0].Path, "chrome", "ghost-ui", "state.json"), "{\"version\":\"9.9.9\"}");
+                                break;
                             case "later": card.Later.PerformClick(); break;
                             case "install": card.Primary.PerformClick(); break;
                             case "approve": card.Confirm.PerformClick(); break;
@@ -67,7 +74,8 @@ namespace GhostUI {
                     var className = new System.Text.StringBuilder(64);
                     Native.GetClassName(foreground, className, className.Capacity);
                     string result = UpdateRules.Json().Serialize(new {
-                        actor = Process.GetCurrentProcess().Id, ack = acknowledged, visible = card.Visible,
+                        actor = Process.GetCurrentProcess().Id, ack = acknowledged, visible = card.Visible && !card.IsCompact,
+                        launcherVisible = card.Visible && card.IsCompact, autoChecks = card.AutoCheck.Checked, checkEnabled = card.Check.Enabled,
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
                         manual = card.Manual.Text, manualEnabled = card.Manual.Enabled,
                         ready = (bool)Field(controller, "ready"), confirming = card.Confirm.Visible,

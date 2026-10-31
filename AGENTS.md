@@ -15,6 +15,7 @@ Read this file before changing this project.
 - Update UI appears only inside Firefox: a companion-owned overlay over a positively identified, visible Bonjourr start page. No Windows update notifications, update tray items or separate update taskbar window.
 - Always display the short English summary. If unavailable, say so; never invent a summary.
 - Offer `Download`, `Download manually`, `Later`, and `All changes`. Manual download opens the official release page for ZIP installation with `Install.cmd`.
+- Keep Check now and Check daily reachable inside Firefox when automatic checks are disabled, even if every profile is up to date.
 - Downloading never installs. Only a fresh explicit `Install update` action authorizes the selected version and profile. Never persist consent as a scheduled or startup action.
 - After `Later`, remind once per Firefox process session when the user next opens the start page. Downloaded state survives companion/browser restarts; validate the cached package before offering installation.
 - Preserve Bonjourr, user settings, profile backups and installer conflict checks. Do not modify/repackage another extension, disable Firefox signing/security checks, force-close Firefox, or use privileged browser injection.

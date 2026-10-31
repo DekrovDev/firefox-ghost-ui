@@ -191,6 +191,20 @@ namespace GhostUI {
                 using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read)) return Verify(stream, release);
             } catch (IOException) { return false; } catch (UnauthorizedAccessException) { return false; }
         }
+        internal void PromotePackage(string temporary, UpdateRelease release) {
+            SafeDirectory(Root);
+            temporary = IOPath(temporary);
+            using (var incoming = new FileStream(temporary, FileMode.Open, FileAccess.Read, FileShare.Read))
+                if (!Verify(incoming, release)) throw new InvalidDataException("Package verification failed.");
+            string target = Package(release);
+            if (!File.Exists(target)) { File.Move(temporary, target); return; }
+            if ((File.GetAttributes(target) & FileAttributes.ReparsePoint) != 0) throw new IOException("Redirected cached package was preserved.");
+            if (Ready(release)) { File.Delete(temporary); return; }
+            // Preserve the damaged file, but let a verified retry repair the
+            // fixed cache path atomically. Never delete paths from metadata.
+            string backup = IOPath(Path.Combine(Root, Guid.NewGuid().ToString("N") + ".invalid"));
+            File.Replace(temporary, target, backup);
+        }
         internal UpdateProfile[] Profiles() {
             string handles = Path.Combine(Path.GetDirectoryName(Root), "handles", "installed.json");
             try {
@@ -281,13 +295,8 @@ namespace GhostUI {
                         using (var input = response.GetResponseStream())
                         using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None)) {
                             Copy(input, output, release.Size, token, progress, release.Size); output.Flush(true);
-                            if (!UpdateStore.Verify(output, release)) throw new InvalidDataException("Package verification failed.");
                         }
-                        string target = store.Package(release);
-                        if (File.Exists(target)) {
-                            if (!store.Ready(release)) throw new IOException("An invalid cached package was preserved. Use Download manually.");
-                            File.Delete(temporary);
-                        } else File.Move(temporary, target);
+                        store.PromotePackage(temporary, release);
                         return;
                     }
                 }
@@ -338,6 +347,10 @@ namespace GhostUI {
     }
     internal sealed class UpdateCard : Form {
         internal event Action DismissRequested;
+        internal event Action OpenRequested;
+        private readonly Panel body = new Panel { Dock = DockStyle.Fill };
+        private readonly Button launcher;
+        internal bool IsCompact { get; private set; }
         internal readonly Label TitleLabel, VersionLabel, SummaryLabel, StatusLabel;
         internal readonly Button Primary, Later, Cancel, Confirm, Check, Manual;
         internal readonly LinkLabel Changes;
@@ -349,7 +362,12 @@ namespace GhostUI {
             FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual;
             AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(448, 472);
             BackColor = Color.FromArgb(34, 32, 30); ForeColor = Color.FromArgb(244, 239, 230);
-            Font = new Font("Segoe UI", 10); Opacity = .97; Padding = new Padding(22);
+            Font = new Font("Segoe UI", 10); Opacity = .97;
+            Controls.Add(body);
+            launcher = new Button { Text = "Ghost UI updates", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, Visible = false, AccessibleName = "Open Ghost UI update settings" };
+            launcher.FlatAppearance.BorderColor = Color.FromArgb(133, 123, 109);
+            launcher.Click += delegate { if (OpenRequested != null) OpenRequested(); };
+            Controls.Add(launcher);
             var brand = LabelAt("GHOST UI", 22, 16, 330, 20); brand.Font = new Font(Font.FontFamily, 9, FontStyle.Bold);
             var close = ButtonAt("\u00d7", 400, 9, 28, 28, false); close.AccessibleName = "Remind me next Firefox session";
             TitleLabel = LabelAt("Update available", 22, 48, 402, 32); TitleLabel.Font = new Font(Font.FontFamily, 17);
@@ -357,7 +375,7 @@ namespace GhostUI {
             var caption = LabelAt("What's new", 22, 119, 402, 22); caption.Font = new Font(Font.FontFamily, 10, FontStyle.Bold);
             SummaryLabel = LabelAt("", 22, 146, 402, 117);
             Profiles = new ComboBox { Left = 22, Top = 268, Width = 402, DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Profile to update" };
-            Controls.Add(Profiles);
+            body.Controls.Add(Profiles);
             StatusLabel = LabelAt("Installation always needs your permission.", 22, 303, 402, 43);
             Primary = ButtonAt("Download", 22, 353, 222, 38, true);
             Later = ButtonAt("Later", 256, 353, 168, 38, false);
@@ -366,27 +384,35 @@ namespace GhostUI {
             Manual = ButtonAt("Download manually", 22, 401, 222, 28, false);
             Changes = LinkAt("All changes", 256, 403, 168);
             AutoCheck = new CheckBox { Text = "Check daily", Left = 22, Top = 436, Width = 190, Height = 24, Checked = true, AccessibleName = "Check for updates daily" };
-            Controls.Add(AutoCheck);
+            body.Controls.Add(AutoCheck);
             Check = ButtonAt("Check now", 256, 432, 168, 28, false);
             close.Click += delegate { if (DismissRequested != null) DismissRequested(); };
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; if (DismissRequested != null) DismissRequested(); } };
         }
+        internal void SetCompact(bool compact) {
+            if (IsCompact == compact) return;
+            IsCompact = compact;
+            float scale = DeviceDpi / 96f;
+            ClientSize = compact ? new Size((int)(176 * scale), (int)(38 * scale)) : new Size((int)(448 * scale), (int)(472 * scale));
+            body.Visible = !compact; launcher.Visible = compact;
+        }
+        internal void OpenSettings() { launcher.PerformClick(); }
         protected override bool ProcessCmdKey(ref Message message, Keys key) {
             if (key == Keys.Escape) { if (DismissRequested != null) DismissRequested(); return true; }
             return base.ProcessCmdKey(ref message, key);
         }
         private Label LabelAt(string text, int x, int y, int width, int height) {
             var label = new Label { Text = text, Left = x, Top = y, Width = width, Height = height, UseMnemonic = false };
-            Controls.Add(label); return label;
+            body.Controls.Add(label); return label;
         }
         private Button ButtonAt(string text, int x, int y, int width, int height, bool primary) {
             var button = new Button { Text = text, Left = x, Top = y, Width = width, Height = height, FlatStyle = FlatStyle.Flat,
                 BackColor = primary ? Color.FromArgb(244, 235, 220) : BackColor, ForeColor = primary ? Color.FromArgb(35, 32, 29) : ForeColor };
-            button.FlatAppearance.BorderColor = Color.FromArgb(133, 123, 109); Controls.Add(button); return button;
+            button.FlatAppearance.BorderColor = Color.FromArgb(133, 123, 109); body.Controls.Add(button); return button;
         }
         private LinkLabel LinkAt(string text, int x, int y, int width) {
             var link = new LinkLabel { Text = text, Left = x, Top = y, Width = width, Height = 24, LinkColor = ForeColor, ActiveLinkColor = Color.White, VisitedLinkColor = ForeColor };
-            Controls.Add(link); return link;
+            body.Controls.Add(link); return link;
         }
         protected override void OnResize(EventArgs e) {
             base.OnResize(e);
@@ -411,6 +437,7 @@ namespace GhostUI {
         private readonly UpdateCard card = new UpdateCard();
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         private bool busy, ready, disposed, probing, refreshPending, confirming, launching;
+        private bool manualOpen;
         private CancellationTokenSource download;
         private DateTime nextProbe, detectedAt, nextProfiles, consentUntil, startedAt = DateTime.UtcNow;
         private DateTime profileCheckedAt = DateTime.MinValue;
@@ -439,6 +466,7 @@ namespace GhostUI {
             card.Primary.Click += delegate { if (ready) Confirm(); else Download(); };
             card.Later.Click += delegate { Dismiss(); };
             card.DismissRequested += Dismiss;
+            card.OpenRequested += delegate { manualOpen = true; card.SetCompact(false); Render(); };
             card.Cancel.Click += delegate { Cancel(); };
             card.Confirm.Click += delegate { Consent(); };
             card.Check.Click += delegate { Check(true); };
@@ -545,7 +573,7 @@ namespace GhostUI {
         }
         private void Dismiss() {
             // Dismissal also revokes an in-memory installation approval.
-            confirming = false; consentUntil = DateTime.MinValue;
+            confirming = false; consentUntil = DateTime.MinValue; manualOpen = false;
             state.DismissedSession = session; state.DismissedVersion = state.Release == null ? "none" : state.Release.Version;
             Save(); card.Hide();
         }
@@ -557,7 +585,7 @@ namespace GhostUI {
         private void Render() {
             var release = state.Release; var selected = Selected;
             bool approved = consentUntil > DateTime.UtcNow;
-            card.TitleLabel.Text = release != null && selected != null && UpdateRules.Compare(release.Version, selected.Version) <= 0 ? "This profile is up to date" : ready ? "Ready to install" : "Update available";
+            card.TitleLabel.Text = release == null ? "Ghost UI updates" : selected != null && UpdateRules.Compare(release.Version, selected.Version) <= 0 ? "This profile is up to date" : ready ? "Ready to install" : "Update available";
             card.VersionLabel.Text = release == null ? "Check for Ghost UI updates" : "Version " + release.Version + (selected == null ? "" : " - installed " + selected.Version);
             card.SummaryLabel.Text = release == null || release.Summary == null || release.Summary.Length == 0 ? "Release notes unavailable. See All changes." : String.Join("\n", release.Summary.Select(s => "\u2022 " + s));
             card.StatusLabel.Text = release != null && !UpdateRules.Valid(release) ? "Automatic download unavailable. Choose Download manually." : status ?? (ready ? "Downloaded and verified. Installation needs your permission." : "Installation always needs your permission.");
@@ -580,17 +608,21 @@ namespace GhostUI {
                     if (now >= consentUntil) { consentUntil = DateTime.MinValue; status = "Approval expired. Click Install update to try again."; Render(); }
                     else if (!FirefoxRunning()) { LaunchInstall(); return; }
                 }
-                if (now - profileCheckedAt > TimeSpan.FromSeconds(10) || state.Release == null ||
-                    !profiles.Any(p => UpdateRules.Compare(state.Release.Version, p.Version) > 0)) { card.Hide(); return; }
+                if (now - profileCheckedAt > TimeSpan.FromSeconds(10) || profiles.Length == 0) { card.Hide(); return; }
+                bool offered = state.Release != null && profiles.Any(p => UpdateRules.Compare(state.Release.Version, p.Version) > 0);
+                if (!offered && !state.Disabled && !manualOpen) { card.Hide(); return; }
                 IntPtr foreground = Native.GetForegroundWindow();
                 IntPtr firefox = foreground == card.Handle || Native.GetAncestor(foreground, 2) == card.Handle ? owner : foreground;
                 if (!Native.IsFirefox(firefox) || Native.IsIconic(firefox) || Fullscreen(firefox)) { card.Hide(); return; }
                 uint pid; Native.GetWindowThreadProcessId(firefox, out pid);
                 using (var process = Process.GetProcessById((int)pid)) session = pid + ":" + process.StartTime.ToUniversalTime().Ticks;
                 string version = state.Release == null ? "none" : state.Release.Version;
-                if (state.DismissedSession == session && state.DismissedVersion == version) { card.Hide(); return; }
-                if (now >= nextProbe && !probing) Probe(firefox);
-                if (detectedWindow != firefox || detectedOrigin == null || now - detectedAt > TimeSpan.FromMilliseconds(800)) { card.Hide(); return; }
+                bool dismissed = state.DismissedSession == session && state.DismissedVersion == version;
+                bool compact = !manualOpen && (!offered || dismissed);
+                if (compact && !state.Disabled) { card.Hide(); return; }
+                card.SetCompact(compact);
+                if (now >= nextProbe && !probing) Probe(firefox, compact);
+                if (detectedWindow != firefox || detectedOrigin == null || now - detectedAt > TimeSpan.FromMilliseconds(compact ? 1800 : 800)) { card.Hide(); return; }
                 Rectangle bounds = Native.Bounds(firefox);
                 int margin = Math.Max(16, card.Width / 24);
                 if (bounds.Width < card.Width + 100 || bounds.Height < card.Height + 120) { card.Hide(); return; }
@@ -605,8 +637,8 @@ namespace GhostUI {
                 }
             } catch { card.Hide(); }
         }
-        private void Probe(IntPtr window) {
-            probing = true; nextProbe = DateTime.UtcNow.AddMilliseconds(350);
+        private void Probe(IntPtr window, bool compact) {
+            probing = true; nextProbe = DateTime.UtcNow.AddMilliseconds(compact ? 1000 : 350);
             int page = pageGeneration;
             string[] origins = profiles.Select(p => p.Origin).Distinct().ToArray();
             var thread = new Thread(delegate() {
@@ -818,6 +850,15 @@ namespace GhostUI {
             bool corruptRejected = false;
             try { UpdateInstaller.Extract(fixture, package); } catch (InvalidDataException) { corruptRejected = true; }
             check(corruptRejected, "Reverify package before extracting for installation");
+            zip[0] ^= 1;
+            string retry = UpdateStore.IOPath(Path.Combine(fixture.Root, "verified-retry.part"));
+            File.WriteAllBytes(retry, zip); fixture.PromotePackage(retry, package);
+            check(fixture.Ready(package), "Verified retry replaces a damaged cache");
+            check(Directory.GetFiles(UpdateStore.IOPath(fixture.Root), "*.invalid").Length == 1, "Damaged cache is preserved separately");
+            zip[0] ^= 1; File.WriteAllBytes(retry, zip);
+            bool badRetryRejected = false;
+            try { fixture.PromotePackage(retry, package); } catch (InvalidDataException) { badRetryRejected = true; }
+            check(badRetryRejected && fixture.Ready(package), "An invalid retry cannot replace a verified cache");
         }
     }
 }

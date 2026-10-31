@@ -1,8 +1,10 @@
 name: Installer checks
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -16,6 +18,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Validate release tag and notes
+        if: github.ref_type == 'tag'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'VERSION')).Trim()
+          if ($version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Invalid VERSION.' }
+          if ($env:GITHUB_REF -cne "refs/tags/v$version") { throw 'Tag must match VERSION.' }
+          ./scripts/Write-ReleaseNotes.ps1
       - name: Prepare test evidence
         shell: pwsh
         run: |
@@ -117,6 +128,17 @@ jobs:
             test-output/update-browser.txt
             test-output/process-lifetime.txt
             test-output/helper-fixtures.txt
+      - name: Upload tested release package
+        if: success() && github.ref_type == 'tag'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-package
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            dist/firefox-ghost-ui-*-windows.zip
+            dist/SHA256SUMS.txt
+            dist/RELEASE_NOTES.md
   linux:
     if: ${{ !cancelled() }}
     needs: windows

@@ -5,6 +5,7 @@ profile. No live release API, download or installation is used by this fixture.
 """
 import argparse
 import ctypes
+from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
@@ -45,7 +46,7 @@ def main():
                          '<h1>Start page fixture</h1><p>Trusted temporary test extension.</p></body>')
     digest = hashlib.sha256(b'abc').hexdigest()
     release = {'Version': '9.9.9', 'Size': 3, 'Digest': digest, 'Summary': ['A short English update summary.']}
-    (root / 'updates/updates.json').write_text(json.dumps({'Release': release, 'Disabled': True}), encoding='utf-8')
+    (root / 'updates/updates.json').write_text(json.dumps({'Release': release, 'Disabled': True, 'CheckedUtc': datetime.now(timezone.utc).isoformat()}), encoding='utf-8')
     browser = None
     actor = None
     command_id = 0
@@ -77,6 +78,8 @@ def main():
     def start_browser():
         nonlocal browser
         browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', folder, headless=False)
+        browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
+        print(f'Firefox launcher PID={browser.process.pid}, browser PID={browser.browser_pid}', flush=True)
         browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1100, 'height': 820})
         browser.command('Addon:Install', {'path': str(extension), 'temporary': True})
         uuid = browser.js("return JSON.parse(Services.prefs.getStringPref('extensions.webextensions.uuids'))[arguments[0]];", [addon_id])
@@ -94,7 +97,7 @@ def main():
 
     def start_actor(expect_card=True):
         nonlocal actor
-        actor = toolbar.JobProcess([str(args.actor), str(root), str(browser.process.pid)])
+        actor = toolbar.JobProcess([str(args.actor), str(root), str(browser.browser_pid)])
         wait(lambda s: True, 'Actor did not report state')
         command('focus')
         # A focus ack is not the same as the OS foreground having moved; the
@@ -154,7 +157,17 @@ def main():
         # check. The real helper must reject and the still-running card recover.
         command('handoff-failure')
         wait(lambda s: not s['launching'] and s['visible'] and 'not installed' in s['status'], 'Failed pre-stop helper did not restore a retryable card')
-        print('PASS: real Firefox extension URL/MSAA, native card bounds/summary/manual button, page/focus hiding, session dismissal, cached reminder, confirmation/cancellation and pre-stop helper failure recovery', flush=True)
+        command('profile-current')
+        wait(lambda s: s['launcherVisible'] and not s['visible'], 'Disabled checks have no settings launcher after updating')
+        command('open-settings')
+        state = wait(lambda s: s['visible'] and s['title'] == 'This profile is up to date', 'Settings did not open')
+        assert not state['autoChecks'] and state['checkEnabled'], state
+        command('enable-checks')
+        assert wait(lambda s: s['autoChecks'], 'Daily checks could not be enabled')['autoChecks']
+        assert not json.loads((root / 'updates/updates.json').read_text(encoding='utf-8'))['Disabled']
+        command('later')
+        wait(lambda s: not s['visible'] and not s['launcherVisible'], 'Up-to-date checks-on profile retained a launcher')
+        print('PASS: real Firefox extension URL/MSAA, native card bounds/summary/manual button, page/focus hiding, session dismissal, cached reminder, confirmation/cancellation, pre-stop helper failure recovery and disabled-check settings access', flush=True)
     finally:
         if actor is not None:
             actor.close()
