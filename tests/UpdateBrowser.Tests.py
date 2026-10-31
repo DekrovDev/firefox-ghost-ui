@@ -98,8 +98,9 @@ def main():
         wait(lambda s: True, 'Actor did not report state')
         command('focus')
         # A focus ack is not the same as the OS foreground having moved; the
-        # card rule requires the Firefox window to be foreground, so assert it.
-        wait(lambda s: s.get('browserWindowIsForeground'), 'Firefox window did not take foreground')
+        # card rule requires the Firefox window itself to be foreground, which
+        # the product reports independently once it adopts the window as owner.
+        wait(lambda s: s.get('ownerIsForeground'), 'Firefox window did not take foreground')
 
     def stop_actor():
         nonlocal actor
