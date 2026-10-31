@@ -100,7 +100,7 @@ Installer tests use disposable profiles and cover first install, updates, custom
 
 `VERSION` is the tracked numeric stable SemVer source. The builder reads it by default; `-Version` permits an explicit numeric override for local builds. The explicit whitelist includes linked guides and screenshots, excludes profiles, backups, diagnostics and Git metadata, and produces `firefox-ghost-ui-<version>-windows.zip` plus `SHA256SUMS.txt`.
 
-Publishing requires an intentional real `vX.Y.Z` tag matching `VERSION`. The release workflow runs Windows tests and verifies SHA-256; it refuses to replace an existing release. Main/documentation pushes never publish releases. Historical notes remain in [GitHub Releases](https://github.com/DekrovDev/firefox-ghost-ui/releases).
+Publishing requires an intentional real `vX.Y.Z` tag matching `VERSION` and a versioned English Summary in `CHANGELOG.md`. The release workflow runs Windows tests and verifies SHA-256; it refuses to replace an existing release. `scripts/Write-ReleaseNotes.ps1` generates the release body from that changelog; the in-Firefox update card reads its same Summary block. Local builds may use an explicitly labeled Unreleased preview. Main/documentation pushes never publish releases. Historical notes remain in [GitHub Releases](https://github.com/DekrovDev/firefox-ghost-ui/releases). See [updates](updates.md) for UI behavior, consent and verification limits.
 
 ## Third-party credits
 

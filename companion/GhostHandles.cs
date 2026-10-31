@@ -349,6 +349,7 @@ namespace GhostUI {
         private readonly Grip rescue;
         private readonly Dictionary<Edge, DateTime> approached = new Dictionary<Edge, DateTime>();
         private readonly NotifyIcon tray;
+        private readonly UpdateController updates;
         private readonly string diagnostics;
         private readonly Form demo;
         private readonly System.Threading.EventWaitHandle stop;
@@ -392,6 +393,11 @@ namespace GhostUI {
             menu.Items.Add("Exit", null, delegate { Application.Exit(); });
             tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "Ghost UI — adaptive window handles", ContextMenuStrip = menu, Visible = !testMode };
             tray.DoubleClick += delegate { Recover(); };
+            // Update UI is restricted to the Firefox start page. Test/demo modes
+            // never construct the network or accessibility update subsystem.
+            if (!testMode && demo == null) {
+                try { updates = new UpdateController(); } catch { /* Grips remain available if update storage is inaccessible. */ }
+            }
             IntPtr controllerHandle = Handle;
             if (!testMode) {
                 HotkeyMove = Native.RegisterHotKey(controllerHandle, 1, 0x4003, 0x78); // Ctrl+Alt+F9, no repeat
@@ -674,6 +680,7 @@ namespace GhostUI {
         protected override void Dispose(bool disposing) {
             if (disposing) {
                 timer.Stop(); timer.Dispose();
+                if (updates != null) updates.Dispose();
                 stop.Dispose();
                 Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= displayHandler;
                 Native.UnregisterHotKey(Handle, 1); Native.UnregisterHotKey(Handle, 2);
@@ -689,6 +696,8 @@ namespace GhostUI {
         [STAThread] private static int Main(string[] args) {
             Native.EnablePhysicalCoordinates();
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
+            string install = Value(args, "--apply-update");
+            if (install != null) return UpdateInstaller.Run(install);
             if (args.Contains("--self-test")) return SelfTests.Run();
             string render = Value(args, "--render-style");
             if (render != null) {
@@ -766,6 +775,7 @@ namespace GhostUI {
         private static void Check(bool condition, string reason) { if (!condition) throw new Exception(reason); checks++; }
         internal static int Run() {
             try {
+                UpdateSelfTests.Run(Check);
                 Rectangle[] monitors = { new Rectangle(-1920, 0, 1920, 1040), new Rectangle(0, 0, 1920, 1040), new Rectangle(1920, -500, 2560, 1400) };
                 var poses = new[] { new Rectangle(300, 200, 1000, 600), new Rectangle(1800, 100, 1000, 600),
                     new Rectangle(-900, -400, 1000, 600), new Rectangle(300, 900, 1000, 600), new Rectangle(-2600, 100, 1000, 600),

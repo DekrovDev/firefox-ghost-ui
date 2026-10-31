@@ -32,7 +32,8 @@ try {
         }
     }
     foreach ($name in @('Install-Handles.ps1','Uninstall-Handles.ps1','docs\adaptive-handles.md','docs\technical.md','docs\extensions-panel-workaround.md','VERSION',
-                       'companion\GhostHandles.cs','companion\GhostHandles.exe.config','companion\GhostHandles.manifest')) {
+                       'companion\GhostHandles.cs','companion\GhostUpdates.cs','companion\GhostHandles.exe.config','companion\GhostHandles.manifest',
+                       'AGENTS.md','CHANGELOG.md','docs\updates.md')) {
         if (-not (Test-Path -LiteralPath (Join-Path $package $name))) { throw "Missing packaged file: $name" }
     }
     if ([IO.File]::ReadAllText((Join-Path $package 'VERSION')).Trim() -cne $version) { throw 'Packaged version mismatch.' }

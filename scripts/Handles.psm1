@@ -137,7 +137,7 @@ function Install-GhostHandles {
         $existing = Get-HandlesStartup $StartupRegistryPath
         if (-not (Test-HandlesOwnedStartup $existing $state)) { throw 'A different startup entry already uses FirefoxGhostUIHandles. It was not replaced.' }
         # Content addressing allows compilation before stopping the previous executable.
-        $sourceHashes = @('GhostHandles.cs','GhostHandles.exe.config','GhostHandles.manifest') | ForEach-Object {
+        $sourceHashes = @('GhostHandles.cs','GhostUpdates.cs','GhostHandles.exe.config','GhostHandles.manifest') | ForEach-Object {
             (Get-FileHash -LiteralPath (Join-Path $sourceRoot ('companion\' + $_)) -Algorithm SHA256).Hash
         }
         $sha = [Security.Cryptography.SHA256]::Create()

@@ -46,6 +46,8 @@ The installer saves backups and preserves existing settings. It installs a per-u
 
 ## Update and uninstall
 
+The companion can show an English update card inside your Bonjourr start page, including a short list of changes. **Download** prepares a package; **Install update** and its confirmation approve installation into the selected profile. Close Firefox normally when instructed. A downloaded update is offered again next Firefox session after **Later**; it is never installed merely because Firefox or Windows starts. **Download manually** opens the official release page for the ZIP method below. See [update behavior, trust and verification limits](docs/updates.md).
+
 To update, extract the newer release, close Firefox and run **Install.cmd**. The original pre-install backup is preserved; managed configuration blocks are not duplicated.
 
 To uninstall, close Firefox and run **Uninstall.cmd**. Original managed files and preference values are restored while other current preferences are retained; backups remain in the profile's `chrome/ghost-ui-backups/` folder. Managed file edits block update/uninstall: save your edits or restore the managed file first. [Profile safety](docs/technical.md#profile-safety).
@@ -65,6 +67,7 @@ For Bonjourr at startup, choose it under both **Homepage and new windows** and *
 - [Extensions panel closes immediately: optional workaround](docs/extensions-panel-workaround.md)
 - [Window grips, recovery, DPI and tray controls](docs/adaptive-handles.md)
 - [Technical reference: profiles, preferences, toolbar and development](docs/technical.md)
+- [Update card, manual installation and release notes](docs/updates.md)
 - [Release history](https://github.com/DekrovDev/firefox-ghost-ui/releases)
 
 ## License and credits

@@ -23,6 +23,12 @@ jobs:
           $version = [IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'VERSION')).Trim()
           if ($version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Invalid VERSION.' }
           if ($env:GITHUB_REF -cne "refs/tags/v$version") { throw 'Tag must match VERSION.' }
+      - name: Require versioned English release summary
+        shell: powershell
+        run: ./scripts/Write-ReleaseNotes.ps1
+      - name: Release summary fixtures
+        shell: powershell
+        run: ./tests/ReleaseNotes.Tests.ps1
       - name: Installer on Windows PowerShell 5.1
         shell: powershell
         run: ./tests/Installer.Tests.ps1
@@ -35,6 +41,9 @@ jobs:
       - name: Package installation, links and checksum
         shell: powershell
         run: ./tests/Package.Tests.ps1
+      - name: Build release notes from changelog
+        shell: powershell
+        run: ./scripts/Write-ReleaseNotes.ps1 -OutputPath ./dist/RELEASE_NOTES.md
       - name: Test-driver process lifetime
         shell: powershell
         run: python ./tests/Toolbar.Tests.py --job-self-test
@@ -47,6 +56,7 @@ jobs:
           path: |
             dist/firefox-ghost-ui-*-windows.zip
             dist/SHA256SUMS.txt
+            dist/RELEASE_NOTES.md
           if-no-files-found: error
           retention-days: 1
   publish:
@@ -76,5 +86,5 @@ jobs:
           if ([IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'dist/SHA256SUMS.txt')).Trim() -cne "$hash  $name") { throw 'Checksum mismatch.' }
           gh release view $tag --repo $env:GH_REPO *> $null
           if ($LASTEXITCODE -eq 0) { throw 'Release already exists; refusing to replace history.' }
-          gh release create $tag $archive './dist/SHA256SUMS.txt' --verify-tag --title $tag --generate-notes
+          gh release create $tag $archive './dist/SHA256SUMS.txt' --verify-tag --title $tag --notes-file './dist/RELEASE_NOTES.md'
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }
