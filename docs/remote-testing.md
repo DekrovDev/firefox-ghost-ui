@@ -35,6 +35,9 @@ Identify the dispatched run by branch, exact SHA, event, and dispatch time;
 never assume the newest run belongs to this session. Only a completed run with
 successful required jobs verifies the change. Uncommitted/unpushed changes are
 not tested. Run IDs and source SHA are also included in the artifacts.
+Do not combine `gh run view --exit-status` with `--json` and rely on its exit
+code: gh 2.103.3 returned zero for a completed failed run in that mode. Inspect
+JSON `status` and `conclusion` explicitly, or use `gh run watch --exit-status`.
 
 The workflow filename already exists on the default branch. Dispatching the
 enhanced version with `--ref` can be used before merging; a completely new

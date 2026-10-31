@@ -65,6 +65,7 @@ class LauncherTests(unittest.TestCase):
             self.assertTrue(server.stdin.closed)
         self.assertNotEqual(*tokens)
 
+    @unittest.skipUnless(os.name == 'nt', 'Windows Firefox launcher flags')
     def test_parent_eof_stops_both_servers_before_connecting(self):
         for filename in ('firefox-probe-server.py', 'firefox-screenshot-server.py'):
             driver = load_driver(filename)

@@ -59,7 +59,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload Windows test evidence
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: checks-windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-output/*.txt
@@ -83,7 +83,7 @@ jobs:
           python3 -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v 2>&1 | tee test-output/helper-fixtures.txt
       - name: Upload Linux test evidence
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: checks-linux-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-output/*.txt
