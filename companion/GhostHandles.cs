@@ -890,7 +890,8 @@ namespace GhostUI {
                 File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "self-test-results.json"), "{\"passed\":" + checks + "}");
                 return 0;
             } catch (Exception e) {
-                File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "self-test-results.json"), "{\"error\":\"" + e.Message + "\"}");
+                File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "self-test-results.json"),
+                    UpdateRules.Json().Serialize(new { error = e.Message, stack = e.StackTrace, passed = checks }));
                 return 1;
             }
         }

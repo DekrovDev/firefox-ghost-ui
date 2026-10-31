@@ -54,8 +54,10 @@ try {
         Assert ((Get-ItemProperty -LiteralPath $registry).FirefoxGhostUIHandles -ceq $first.Startup) 'Busy lock preserves startup'
     } finally { $held.Dispose() }
     $test = Start-Process -FilePath $first.Executable -ArgumentList '--self-test' -WindowStyle Hidden -PassThru -Wait
+    $selfTestPath = Join-Path (Split-Path $first.Executable -Parent) 'self-test-results.json'
+    if (Test-Path -LiteralPath $selfTestPath) { Write-Output ([IO.File]::ReadAllText($selfTestPath)) }
     Assert ($test.ExitCode -eq 0) 'Compiled geometry checks pass'
-    $geometry = Get-Content -LiteralPath (Join-Path (Split-Path $first.Executable -Parent) 'self-test-results.json') -Raw | ConvertFrom-Json
+    $geometry = Get-Content -LiteralPath $selfTestPath -Raw | ConvertFrom-Json
     Assert ($geometry.passed -ge 324) 'Geometry, native recovery without focus, efficient process identity, DPI and alpha checks actually executed'
     $again = Install-GhostHandles -ProfilePath $profileA -InstallRoot $install -StartupRegistryPath $registry -NoStart
     Assert ($again.Profiles.Count -eq 1) 'Repeated install does not duplicate profile'
