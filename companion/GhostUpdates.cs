@@ -415,8 +415,9 @@ namespace GhostUI {
         private string status;
         private int generation;
         private int pageGeneration;
-        internal UpdateController() {
-            store = new UpdateStore(); state = store.Read();
+        internal UpdateController() : this(new UpdateStore()) { }
+        internal UpdateController(UpdateStore updateStore) {
+            store = updateStore; state = store.Read();
             IntPtr initialHandle = card.Handle; // BeginInvoke must work before the first visible card.
             status = state.Result;
             windowEvent = delegate(IntPtr hook, uint kind, IntPtr window, int objectId, int childId, uint thread, uint time) {
@@ -623,7 +624,21 @@ namespace GhostUI {
             launching = true; card.Hide();
             consentUntil = DateTime.MinValue;
             try {
-                UpdateInstaller.Start(store, state.Release, consentProfile);
+                var helper = UpdateInstaller.Start(store, state.Release, consentProfile);
+                Task.Run(delegate {
+                    try { helper.WaitForExit(); } catch (InvalidOperationException) { }
+                    finally {
+                        helper.Dispose();
+                        Post(delegate {
+                            // If the parent is still alive, handoff failed before
+                            // stopping it. Restore a usable card rather than waiting
+                            // forever for an installer which has already exited.
+                            launching = false; state = store.Read();
+                            status = state.Result ?? "Installation stopped. Try again or download manually.";
+                            RefreshProfiles(); VerifyCache();
+                        });
+                    }
+                });
             } catch { launching = false; status = "Could not start installation. Try again or download manually."; Render(); }
         }
         public void Dispose() {
@@ -641,7 +656,7 @@ namespace GhostUI {
         public string Companion;
     }
     internal static class UpdateInstaller {
-        internal static void Start(UpdateStore store, UpdateRelease release, string profile) {
+        internal static Process Start(UpdateStore store, UpdateRelease release, string profile) {
             string companion = store.CompanionExecutable();
             if (!String.Equals(companion, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Only the registered companion may start this update.");
             // A different process name/path is essential: the ordinary installer
@@ -655,7 +670,9 @@ namespace GhostUI {
                 var request = new InstallRequest { Release = release, Profile = profile, Parent = parent.Id,
                     ParentStartedUtc = parent.StartTime.ToUniversalTime().Ticks, Companion = companion };
                 string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(UpdateRules.Json().Serialize(request)));
-                using (Process.Start(new ProcessStartInfo(helper, "--apply-update " + encoded) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden })) { }
+                var child = Process.Start(new ProcessStartInfo(helper, "--apply-update " + encoded) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden });
+                if (child == null) throw new InvalidOperationException("Could not start the update helper.");
+                return child;
             }
         }
         internal static int Run(string encoded) {

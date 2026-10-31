@@ -174,9 +174,9 @@ class JobProcess:
 
 
 class Firefox:
-    def __init__(self, executable, css, folder):
+    def __init__(self, executable, css, folder, headless=True):
         profile = folder / "profile"
-        (profile / "chrome").mkdir(parents=True)
+        (profile / "chrome").mkdir(parents=True, exist_ok=True)
         shutil.copyfile(css, profile / "chrome" / "userChrome.css")
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
@@ -201,7 +201,7 @@ class Firefox:
             f"user_pref({json.dumps(k)}, {json.dumps(v)});" for k, v in prefs.items()
         ), encoding="utf8")
         self.process = JobProcess(
-            [executable, "-headless", "-no-remote", "-profile", str(profile),
+            [executable, *(["-headless"] if headless else []), "-no-remote", "-profile", str(profile),
              "-marionette", "--remote-allow-system-access", "about:blank"],
         )
         self.connection = None

@@ -17,6 +17,7 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Keep profile selection, backups, managed-file conflict checks and rollback in the existing installer.
 - Support long update-cache and staging paths without changing Windows system policy.
 - Keep the update helper alive while the installer replaces the running companion.
+- Restore the update card if installation stops before the companion exits.
 - Native Firefox/DPI behavior and the installation handoff still require isolated Windows validation.
 
 Historical release notes remain on [GitHub Releases](https://github.com/DekrovDev/firefox-ghost-ui/releases).

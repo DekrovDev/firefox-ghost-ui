@@ -64,6 +64,12 @@ jobs:
         run: |
           Start-Transcript test-output/update-handoff.txt
           try { ./tests/UpdateHandoff.Tests.ps1 } finally { Stop-Transcript }
+      - name: Real Firefox update card
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          Start-Transcript test-output/update-browser.txt
+          try { ./tests/UpdateBrowser.Tests.ps1 } finally { Stop-Transcript }
       - name: Test-driver process lifetime
         if: ${{ !cancelled() }}
         shell: pwsh

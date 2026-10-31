@@ -12,6 +12,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 
+[assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8")]
+
 namespace GhostUI {
     public enum Edge { Left, Right, Top, Bottom }
     public sealed class Placement {
