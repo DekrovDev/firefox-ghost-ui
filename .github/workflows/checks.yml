@@ -64,6 +64,18 @@ jobs:
         run: |
           Start-Transcript test-output/update-handoff.txt
           try { ./tests/UpdateHandoff.Tests.ps1 } finally { Stop-Transcript }
+      - name: Real release metadata over GitHub API
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          Start-Transcript test-output/update-metadata.txt
+          try {
+            $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+            & $compiler /nologo /codepage:65001 /target:exe /main:GhostUI.UpdateMetadataProbe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Core.dll /reference:System.Web.Extensions.dll /reference:System.IO.Compression.dll /out:test-output\UpdateMetadataProbe.exe companion\GhostHandles.cs companion\GhostUpdates.cs tests\UpdateMetadataProbe.cs
+            if ($LASTEXITCODE -ne 0) { throw 'Update metadata probe compilation failed.' }
+            .\test-output\UpdateMetadataProbe.exe
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Stop-Transcript }
       - name: Real Firefox update card
         if: ${{ !cancelled() }}
         shell: powershell
@@ -82,6 +94,29 @@ jobs:
         run: |
           python -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v 2>&1 | Tee-Object test-output/helper-fixtures.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload test logs and diagnostics
+        # Keep Windows/Linux evidence even when individual steps fail. Only
+        # plain-text transcripts and source metadata are collected; retention
+        # is bounded and no secrets or binaries are included.
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-test-logs
+          if-no-files-found: warn
+          retention-days: 3
+          path: |
+            test-output/source.txt
+            test-output/installer-ps51.txt
+            test-output/installer-ps7.txt
+            test-output/release-notes-ps51.txt
+            test-output/release-notes-ps7.txt
+            test-output/handles.txt
+            test-output/package.txt
+            test-output/update-handoff.txt
+            test-output/update-metadata.txt
+            test-output/update-browser.txt
+            test-output/process-lifetime.txt
+            test-output/helper-fixtures.txt
   linux:
     if: ${{ !cancelled() }}
     needs: windows
@@ -99,3 +134,13 @@ jobs:
           printf 'commit=%s\nrun=%s\nattempt=%s\nevent=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_EVENT_NAME" > test-output/source.txt
           cat test-output/source.txt
           python3 -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v 2>&1 | tee test-output/helper-fixtures.txt
+      - name: Upload test logs and diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-test-logs
+          if-no-files-found: warn
+          retention-days: 3
+          path: |
+            test-output/source.txt
+            test-output/helper-fixtures.txt

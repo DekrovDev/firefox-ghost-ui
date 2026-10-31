@@ -56,4 +56,6 @@ Local package builds can use `Unreleased` as an explicitly labeled preview; tag 
 
 ## Verification status
 
-The implementation includes offline rule/metadata/archive regression fixtures and existing installer/package checks. A live Windows/Firefox test of accessibility identification, stacking, mixed DPI, restart reminders, download cancellation and the full installation handoff is required before release. Do not interpret the visual mockup or a source review as proof those checks passed.
+Automated checks run on hosted runners on every push: offline rule/metadata/archive regression fixtures, the installer and package suites, a real-Firefox overlay fixture (disposable profile; card presence, identity and hide/re-show, restart reminders and the full installation handoff), a real installer-handoff fixture, and a live GitHub Releases metadata check that exercises the shipped update network code against the real API and never downloads or installs a package (a rate-limited shared runner skips that check instead of failing).
+
+These fixtures cannot cover everything: the 125/150/200 % DPI scaling matrix, unmaximized and very small window layouts beyond the fixed runner resolution, keyboard/focus traversal, graphics-driver variation, and the multi-restart reminder cycle on a personal profile remain manual checks. Verify them on your own machine when the update system matters to you; they are not automatically validated and no source review or mockup substitutes for them.
