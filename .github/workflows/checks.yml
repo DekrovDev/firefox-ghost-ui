@@ -2,8 +2,12 @@ name: Installer checks
 on:
   push:
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: installer-checks-${{ github.repository }}
+  cancel-in-progress: false
 jobs:
   windows:
     runs-on: windows-latest
@@ -12,26 +16,76 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Prepare test evidence
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force test-output | Out-Null
+          "commit=$env:GITHUB_SHA`nrun=$env:GITHUB_RUN_ID`nattempt=$env:GITHUB_RUN_ATTEMPT`nevent=$env:GITHUB_EVENT_NAME" |
+            Set-Content test-output/source.txt
       - name: Windows PowerShell 5.1
         shell: powershell
-        run: ./tests/Installer.Tests.ps1
+        run: |
+          Start-Transcript test-output/installer-ps51.txt
+          try { ./tests/Installer.Tests.ps1 } finally { Stop-Transcript }
       - name: PowerShell 7
         if: ${{ !cancelled() }}
         shell: pwsh
-        run: ./tests/Installer.Tests.ps1
+        run: |
+          Start-Transcript test-output/installer-ps7.txt
+          try { ./tests/Installer.Tests.ps1 } finally { Stop-Transcript }
       - name: Adaptive window grips
         if: ${{ !cancelled() }}
         shell: powershell
-        run: ./tests/Handles.Tests.ps1
+        run: |
+          Start-Transcript test-output/handles.txt
+          try { ./tests/Handles.Tests.ps1 } finally { Stop-Transcript }
       - name: Packaged installation
         if: ${{ !cancelled() }}
         shell: powershell
-        run: ./tests/Package.Tests.ps1
+        run: |
+          Start-Transcript test-output/package.txt
+          try { ./tests/Package.Tests.ps1 } finally { Stop-Transcript }
       - name: Test-driver process lifetime
         if: ${{ !cancelled() }}
-        shell: powershell
-        run: python ./tests/Toolbar.Tests.py --job-self-test
+        shell: pwsh
+        run: |
+          python ./tests/Toolbar.Tests.py --job-self-test 2>&1 | Tee-Object test-output/process-lifetime.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Development helper regression fixtures
         if: ${{ !cancelled() }}
-        shell: powershell
-        run: python -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v
+        shell: pwsh
+        run: |
+          python -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v 2>&1 | Tee-Object test-output/helper-fixtures.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload Windows test evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: checks-windows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-output/*.txt
+          if-no-files-found: error
+          retention-days: 1
+  linux:
+    if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Portable helper regression fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-output
+          printf 'commit=%s\nrun=%s\nattempt=%s\nevent=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_EVENT_NAME" > test-output/source.txt
+          python3 -m unittest discover -s devtools/firefox -p test_ghost_safety.py -v 2>&1 | tee test-output/helper-fixtures.txt
+      - name: Upload Linux test evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: checks-linux-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-output/*.txt
+          if-no-files-found: error
+          retention-days: 1
