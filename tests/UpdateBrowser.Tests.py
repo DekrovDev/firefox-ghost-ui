@@ -92,7 +92,7 @@ def main():
         browser.command('WebDriver:Navigate', {'url': origin + 'index.html'})
         return origin
 
-    def start_actor():
+    def start_actor(expect_card=True):
         nonlocal actor
         actor = toolbar.JobProcess([str(args.actor), str(root), str(browser.process.pid)])
         wait(lambda s: True, 'Actor did not report state')
@@ -100,7 +100,10 @@ def main():
         # A focus ack is not the same as the OS foreground having moved; the
         # card rule requires the Firefox window itself to be foreground, which
         # the product reports independently once it adopts the window as owner.
-        wait(lambda s: s.get('ownerIsForeground'), 'Firefox window did not take foreground')
+        # An in-session dismissal ('Later') makes the card stay hidden on
+        # purpose, so this condition only applies before any dismissal.
+        if expect_card:
+            wait(lambda s: s.get('ownerIsForeground'), 'Firefox window did not take foreground')
 
     def stop_actor():
         nonlocal actor
@@ -125,7 +128,9 @@ def main():
         command('later')
         wait(lambda s: not s['visible'], 'Later did not dismiss the card')
         stop_actor()
-        start_actor()
+        # Same Firefox process and session, so the dismissed card correctly
+        # stays hidden and the foreground condition no longer applies.
+        start_actor(False)
         time.sleep(2)
         assert not wait(lambda s: s['profiles'] == 1, 'Profile not loaded')['visible'], 'Companion restart repeated a dismissed session'
         stop_actor()
