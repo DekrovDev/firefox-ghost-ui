@@ -31,17 +31,11 @@ class JobProcess:
     Using PROC_THREAD_ATTRIBUTE_JOB_LIST avoids the Popen/AssignProcess race.
     Fail closed if job attributes are unsupported; never start unowned Firefox.
     """
-    def __init__(self, args, env=None):
+    def __init__(self, args):
         if os.name != 'nt':
             raise OSError('These browser checks require Windows 10+ job support')
         from ctypes import wintypes as w
         self.args = list(map(str, args))
-        self.environ = None
-        if env is not None:
-            # Unicode environment block: sorted entries separated and
-            # terminated by null characters, ending with an extra null.
-            block = "\0".join("{}={}".format(key, val) for key, val in sorted(env.items())) + "\0\0"
-            self.environ = ctypes.create_unicode_buffer(block)
         self.returncode = None
         self._job = None
         self._handle = None
@@ -112,10 +106,9 @@ class JobProcess:
             startup.attributes = ctypes.cast(attributes, w.LPVOID)
             command = ctypes.create_unicode_buffer(subprocess.list2cmdline(self.args))
             executable = str(pathlib.Path(self.args[0]).resolve(strict=True))
-            environment = ctypes.cast(self.environ, w.LPVOID) if self.environ is not None else None
             self.check(self.api.CreateProcessW(executable, command, None, None, False,
                        0x00080000 | 0x08000000, # EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW
-                       environment, None, ctypes.byref(startup), ctypes.byref(info)))
+                       None, None, ctypes.byref(startup), ctypes.byref(info)))
             self._handle, self.pid = info.process, info.pid
             member = w.BOOL()
             self.check(self.api.IsProcessInJob(self._handle, self._job, ctypes.byref(member)))
@@ -207,16 +200,9 @@ class Firefox:
         (profile / "user.js").write_text("\n".join(
             f"user_pref({json.dumps(k)}, {json.dumps(v)});" for k, v in prefs.items()
         ), encoding="utf8")
-        # Newer Firefox builds gate Marionette system access behind this
-        # environment variable in addition to the CLI system-access flag.
-        # The Windows environment carries '=drive:' pseudo entries whose names
-        # begin with '='; they are not representable in a CreateProcessW block.
-        launch_env = {key: val for key, val in os.environ.items() if not key.startswith("=")}
-        launch_env["MOZ_REMOTE_ALLOW_SYSTEM_ACCESS"] = "1"
         self.process = JobProcess(
             [executable, *(["-headless"] if headless else []), "-no-remote", "-profile", str(profile),
              "-marionette", "--remote-allow-system-access", "about:blank"],
-            launch_env,
         )
         self.connection = None
         self.sequence = 0

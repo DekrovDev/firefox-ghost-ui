@@ -2,6 +2,9 @@
 # Build an unshipped actor against the real controller, then test a fresh Firefox.
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Use a disposable GitHub-hosted Windows runner.' }
+# Newer runner Firefox builds gate Marionette system access behind this variable;
+# the launcher JobProcess inherits the process environment, like production.
+$env:MOZ_REMOTE_ALLOW_SYSTEM_ACCESS = '1'
 $root = Split-Path $PSScriptRoot -Parent
 $fixture = Join-Path $root ('test-output\browser-' + [Guid]::NewGuid().ToString('N'))
 $actorFolder = Join-Path $fixture 'handles\actor'
