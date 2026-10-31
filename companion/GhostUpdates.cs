@@ -730,7 +730,9 @@ namespace GhostUI {
             }
             var manualOnly = UpdateRules.ParseRelease(json.Replace("sha256:" + digest, ""));
             check(UpdateRules.MetadataValid(manualOnly) && !UpdateRules.Valid(manualOnly), "Missing digest retains manual download only");
-            var fixture = new UpdateStore(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "update-fixtures-" + Guid.NewGuid().ToString("N")));
+            string fixtureRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "update-fixtures-" + Guid.NewGuid().ToString("N"));
+            while (fixtureRoot.Length < 280) fixtureRoot = Path.Combine(fixtureRoot, "long-cache-path");
+            var fixture = new UpdateStore(fixtureRoot);
             var state = new UpdateState { Release = parsed, DismissedSession = "123:456", DismissedVersion = parsed.Version, Disabled = true };
             fixture.Write(state); var restored = fixture.Read();
             check(restored.Disabled && restored.DismissedSession == state.DismissedSession && restored.Release.Summary[0] == parsed.Summary[0], "Persist dismissal/summary/settings without install approval");
