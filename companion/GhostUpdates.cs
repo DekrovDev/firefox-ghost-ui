@@ -133,12 +133,22 @@ namespace GhostUI {
             Root = Path.GetFullPath(root);
             SafeDirectory(Root);
         }
+        // Extended paths avoid depending on the machine-wide LongPathsEnabled
+        // policy. Validate/canonicalize logical paths before crossing into I/O.
+        internal static string IOPath(string path) {
+            if (path.StartsWith(@"\\?\", StringComparison.Ordinal)) return path;
+            string full = Path.GetFullPath(path);
+            if (full.Length < 240) return full;
+            return full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full.Substring(2) : @"\\?\" + full;
+        }
         internal static void SafeDirectory(string path) {
-            Directory.CreateDirectory(path);
-            for (var directory = new DirectoryInfo(path); directory != null; directory = directory.Parent)
+            string io = IOPath(path);
+            Directory.CreateDirectory(io);
+            for (var directory = new DirectoryInfo(io); directory != null; directory = directory.Parent)
                 if ((directory.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Redirected update path is not supported.");
         }
         internal static string ReadSmall(string path, int max) {
+            path = IOPath(path);
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)) {
                 if (stream.Length > max || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) throw new IOException("Invalid update metadata.");
                 using (var reader = new StreamReader(stream, Encoding.UTF8, true)) return reader.ReadToEnd();
@@ -156,7 +166,7 @@ namespace GhostUI {
         }
         internal void Write(UpdateState state) {
             SafeDirectory(Root);
-            string target = Path.Combine(Root, "updates.json"), temp = Path.Combine(Root, Guid.NewGuid().ToString("N") + ".tmp");
+            string target = IOPath(Path.Combine(Root, "updates.json")), temp = IOPath(Path.Combine(Root, Guid.NewGuid().ToString("N") + ".tmp"));
             using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
                 byte[] data = Encoding.UTF8.GetBytes(UpdateRules.Json().Serialize(state)); file.Write(data, 0, data.Length); file.Flush(true);
             }
@@ -167,7 +177,7 @@ namespace GhostUI {
         }
         internal string Package(UpdateRelease release) {
             if (!UpdateRules.Valid(release)) throw new InvalidDataException("Invalid package metadata.");
-            return Path.Combine(Root, "package-" + release.Version + "-" + release.Digest + ".zip");
+            return IOPath(Path.Combine(Root, "package-" + release.Version + "-" + release.Digest + ".zip"));
         }
         internal static bool Verify(Stream stream, UpdateRelease release) {
             if (!UpdateRules.Valid(release) || stream.Length != release.Size) return false;
@@ -193,7 +203,7 @@ namespace GhostUI {
                         if (path != full || path.IndexOf('"') >= 0 || path.Any(Char.IsControl)) continue;
                         var state = UpdateRules.Json().Deserialize<Dictionary<string, object>>(ReadSmall(Path.Combine(path, "chrome", "ghost-ui", "state.json"), 262144));
                         string version = state.ContainsKey("version") ? state["version"] as string : null;
-                        if (!UpdateRules.VersionValid(version) || !File.Exists(Path.Combine(path, "prefs.js"))) continue;
+                        if (!UpdateRules.VersionValid(version) || !File.Exists(IOPath(Path.Combine(path, "prefs.js")))) continue;
                         string css = ReadSmall(Path.Combine(path, "chrome", "ghost-ui", "userContent.css"), 1024 * 1024);
                         Match origin = Regex.Match(css, @"moz-extension://[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/");
                         if (origin.Success) result.Add(new UpdateProfile { Path = path, Version = version, Origin = origin.Value });
@@ -245,7 +255,7 @@ namespace GhostUI {
         }
         internal static void Download(UpdateStore store, UpdateRelease release, CancellationToken token, Action<int> progress) {
             Uri uri = new Uri(UpdateRules.AssetUrl(release.Version));
-            string temporary = Path.Combine(store.Root, Guid.NewGuid().ToString("N") + ".part");
+            string temporary = UpdateStore.IOPath(Path.Combine(store.Root, Guid.NewGuid().ToString("N") + ".part"));
             try {
                 for (int redirects = 0; redirects <= 3; redirects++) {
                     token.ThrowIfCancellationRequested();
@@ -692,7 +702,7 @@ namespace GhostUI {
                         if (!target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("ZIP escaped staging.");
                         UpdateStore.SafeDirectory(Path.GetDirectoryName(target));
                         using (var source = entry.Open())
-                        using (var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None)) UpdateNetwork.Copy(source, output, entry.Length, CancellationToken.None, null, 0);
+                        using (var output = new FileStream(UpdateStore.IOPath(target), FileMode.CreateNew, FileAccess.Write, FileShare.None)) UpdateNetwork.Copy(source, output, entry.Length, CancellationToken.None, null, 0);
                     }
                     if (UpdateStore.ReadSmall(Path.Combine(root, "VERSION"), 64).Trim() != release.Version) throw new InvalidDataException("Packaged version mismatch.");
                     return root;
@@ -736,7 +746,7 @@ namespace GhostUI {
             var state = new UpdateState { Release = parsed, DismissedSession = "123:456", DismissedVersion = parsed.Version, Disabled = true };
             fixture.Write(state); var restored = fixture.Read();
             check(restored.Disabled && restored.DismissedSession == state.DismissedSession && restored.Release.Summary[0] == parsed.Summary[0], "Persist dismissal/summary/settings without install approval");
-            check(!File.ReadAllText(Path.Combine(fixture.Root, "updates.json")).Contains("consent"), "No persisted installation approval");
+            check(!File.ReadAllText(UpdateStore.IOPath(Path.Combine(fixture.Root, "updates.json"))).Contains("consent"), "No persisted installation approval");
             byte[] zip;
             using (var memory = new MemoryStream()) {
                 using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, true)) {
@@ -751,7 +761,7 @@ namespace GhostUI {
             File.WriteAllBytes(fixture.Package(package), zip);
             check(fixture.Ready(package), "Verify cached ZIP hash and size");
             string extracted = UpdateInstaller.Extract(fixture, package);
-            check(File.ReadAllText(Path.Combine(extracted, "VERSION")) == "1.2.0", "Extract verified ZIP without executing it");
+            check(File.ReadAllText(UpdateStore.IOPath(Path.Combine(extracted, "VERSION"))) == "1.2.0", "Extract verified ZIP without executing it");
             zip[0] ^= 1; File.WriteAllBytes(fixture.Package(package), zip);
             check(!fixture.Ready(package), "Tampered package cannot be offered as ready");
             bool corruptRejected = false;
