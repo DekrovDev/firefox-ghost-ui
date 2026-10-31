@@ -13,6 +13,7 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Keep short update descriptions in this file and use them for GitHub Release notes.
 - Require a versioned summary before publishing a release.
 - Show a companion-owned card over positively identified Bonjourr pages without browser injection.
+- Show the update card even when Firefox walks its accessibility tree slowly.
 - Verify GitHub package digests, limit downloads and safely extract packages before installation.
 - Keep profile selection, backups, managed-file conflict checks and rollback in the existing installer.
 - Support long update-cache and staging paths without changing Windows system policy.
