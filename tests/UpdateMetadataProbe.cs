@@ -42,20 +42,19 @@ namespace GhostUI {
                     "Canonical GitHub download URL accepted by the shipped redirect policy");
                 Console.WriteLine("INFO: latest published release " + release.Version);
             } catch (WebException e) {
-                HttpWebResponse response = e.Response as HttpWebResponse;
-                int code = response == null ? 0 : (int)response.StatusCode;
-                if (code == 403 || code == 429) {
-                    // Shared runner IP hit the unauthenticated GitHub API rate
-                    // limit; verify the real backoff bookkeeping and skip.
+                // The shipped Latest() disposes the rate-limit response itself and
+                // records state.RetryUtc exactly for the 403/429 case; read only
+                // that bookkeeping, never the disposed response.
+                if (!string.IsNullOrEmpty(state.RetryUtc)) {
                     DateTime retry;
                     bool parsed = DateTime.TryParse(state.RetryUtc, out retry);
                     double seconds = parsed ? (retry - DateTime.UtcNow).TotalSeconds : -1;
                     check(parsed && seconds > 45 && seconds <= 86500,
-                        "Rate limited; Retry-After backoff recorded inside the bounded window");
+                        "Rate limited by the real API; the shipped backoff window bookkeeping held");
                     Console.WriteLine("SKIP: GitHub rate limited this shared runner IP; metadata success path not exercised this run.");
                     return 0;
                 }
-                check(false, "Unexpected metadata response: " + (code == 0 ? e.Status.ToString() : "HTTP " + code));
+                check(false, "Unexpected metadata response; typed WebException status " + e.Status);
             } catch (Exception e) {
                 check(false, "Metadata check failed with " + e.GetType().Name + ": " + e.Message);
             }

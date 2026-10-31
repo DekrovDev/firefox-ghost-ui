@@ -209,7 +209,9 @@ class Firefox:
         ), encoding="utf8")
         # Newer Firefox builds gate Marionette system access behind this
         # environment variable in addition to the CLI system-access flag.
-        launch_env = dict(os.environ)
+        # The Windows environment carries '=drive:' pseudo entries whose names
+        # begin with '='; they are not representable in a CreateProcessW block.
+        launch_env = {key: val for key, val in os.environ.items() if not key.startswith("=")}
         launch_env["MOZ_REMOTE_ALLOW_SYSTEM_ACCESS"] = "1"
         self.process = JobProcess(
             [executable, *(["-headless"] if headless else []), "-no-remote", "-profile", str(profile),
