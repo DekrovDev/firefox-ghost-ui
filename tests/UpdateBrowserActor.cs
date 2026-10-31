@@ -52,6 +52,9 @@ namespace GhostUI {
                     var bounds = card.Bounds;
                     IntPtr owner = (IntPtr)Field(controller, "owner");
                     var browserBounds = owner == IntPtr.Zero ? System.Drawing.Rectangle.Empty : Native.Bounds(owner);
+                    IntPtr foreground = Native.GetForegroundWindow();
+                    IntPtr detectedWindow = (IntPtr)Field(controller, "detectedWindow");
+                    DateTime detectedAt = (DateTime)Field(controller, "detectedAt");
                     string result = UpdateRules.Json().Serialize(new {
                         actor = Process.GetCurrentProcess().Id, ack = acknowledged, visible = card.Visible,
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
@@ -60,7 +63,13 @@ namespace GhostUI {
                         launching = (bool)Field(controller, "launching"), status = card.StatusLabel.Text,
                         approved = (DateTime)Field(controller, "consentUntil") > DateTime.UtcNow,
                         origin = Field(controller, "detectedOrigin"), profiles = card.Profiles.Items.Count,
-                        inside = browserBounds.Contains(bounds), session = Field(controller, "session")
+                        inside = browserBounds.Contains(bounds),
+                        ownerIsForeground = owner != IntPtr.Zero && foreground == owner,
+                        detectedWindowMatch = detectedWindow == owner && owner != IntPtr.Zero,
+                        freshnessMs = detectedAt == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - detectedAt).TotalMilliseconds,
+                        browserWidth = browserBounds.Width, browserHeight = browserBounds.Height,
+                        zoomed = owner != IntPtr.Zero && Native.IsZoomed(owner), probing = (bool)Field(controller, "probing"),
+                        session = Field(controller, "session")
                     });
                     string temp = Path.Combine(root, "status.tmp"), destination = Path.Combine(root, "status.json");
                     File.WriteAllText(temp, result);

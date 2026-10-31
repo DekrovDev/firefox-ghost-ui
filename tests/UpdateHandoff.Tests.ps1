@@ -62,11 +62,21 @@ try {
     $parent = Start-Process -FilePath $installed.Executable -WindowStyle Hidden -PassThru
     Assert ($parent.WaitForExit(60000)) 'Approved companion parent did not exit within the handoff deadline.'
     Assert ($parent.ExitCode -eq 0) 'Approved companion parent did not receive the helper stop signal.'
+    # The helper writes the Result state after the installer finishes; the state
+    # file is rewritten atomically, so a poll window can miss a replace in
+    # progress. Report an absent file instead of failing on the first poll.
     $deadline = [DateTime]::UtcNow.AddSeconds(45)
+    $polls = 0; $result = $null
     do {
         Start-Sleep -Milliseconds 250
-        $result = [IO.File]::ReadAllText((Join-Path $updatesRoot 'updates.json')) | ConvertFrom-Json
-    } while (-not $result.PSObject.Properties['Result'] -and [DateTime]::UtcNow -lt $deadline)
+        $polls++
+        $path = Join-Path $updatesRoot 'updates.json'
+        if ([IO.File]::Exists($path)) {
+            $result = [IO.File]::ReadAllText($path) | ConvertFrom-Json
+        } else {
+            Write-Output ("poll {0}: updates.json absent" -f $polls)
+        }
+    } while ((-not $result -or -not $result.PSObject.Properties['Result']) -and [DateTime]::UtcNow -lt $deadline)
     Assert ($result.PSObject.Properties['Result'] -and $result.Result -eq 'Update installed. Start Firefox to apply it.') 'Helper did not complete the real installer handoff.'
     $profileState = [IO.File]::ReadAllText((Join-Path $profile 'chrome\ghost-ui\state.json')) | ConvertFrom-Json
     Assert ($profileState.version -eq $nextVersion) 'Installer did not advance the selected profile version.'
