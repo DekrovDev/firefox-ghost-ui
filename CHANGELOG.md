@@ -16,6 +16,7 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Verify GitHub package digests, limit downloads and safely extract packages before installation.
 - Keep profile selection, backups, managed-file conflict checks and rollback in the existing installer.
 - Support long update-cache and staging paths without changing Windows system policy.
+- Keep the update helper alive while the installer replaces the running companion.
 - Native Firefox/DPI behavior and the installation handoff still require isolated Windows validation.
 
 Historical release notes remain on [GitHub Releases](https://github.com/DekrovDev/firefox-ghost-ui/releases).

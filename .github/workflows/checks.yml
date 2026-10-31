@@ -58,6 +58,12 @@ jobs:
         run: |
           Start-Transcript test-output/package.txt
           try { ./tests/Package.Tests.ps1 } finally { Stop-Transcript }
+      - name: Real update installer handoff
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          Start-Transcript test-output/update-handoff.txt
+          try { ./tests/UpdateHandoff.Tests.ps1 } finally { Stop-Transcript }
       - name: Test-driver process lifetime
         if: ${{ !cancelled() }}
         shell: pwsh

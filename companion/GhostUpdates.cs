@@ -212,6 +212,15 @@ namespace GhostUI {
                 return result.GroupBy(p => p.Path, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToArray();
             } catch (IOException) { return new UpdateProfile[0]; } catch (ArgumentException) { return new UpdateProfile[0]; } catch (InvalidOperationException) { return new UpdateProfile[0]; }
         }
+        internal string CompanionExecutable() {
+            string handles = Path.Combine(Path.GetDirectoryName(Root), "handles");
+            var installed = UpdateRules.Json().Deserialize<Dictionary<string, object>>(ReadSmall(Path.Combine(handles, "installed.json"), 65536));
+            string executable = installed.ContainsKey("executable") ? installed["executable"] as string : null;
+            if (String.IsNullOrEmpty(executable) || Path.GetFullPath(executable) != executable ||
+                !executable.StartsWith(handles + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(executable) != "GhostHandles.exe") throw new InvalidDataException("Companion registration is invalid.");
+            return executable;
+        }
     }
     internal static class UpdateNetwork {
         internal static HttpWebResponse Open(Uri uri, bool api, CancellationToken token) {
@@ -612,11 +621,9 @@ namespace GhostUI {
         private void LaunchInstall() {
             if (state.Release == null || state.Release.Version != consentVersion || !profiles.Any(p => p.Path == consentProfile)) { Cancel(); return; }
             launching = true; card.Hide();
-            var request = new InstallRequest { Release = state.Release, Profile = consentProfile, Parent = Process.GetCurrentProcess().Id };
-            string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(UpdateRules.Json().Serialize(request)));
             consentUntil = DateTime.MinValue;
             try {
-                Process.Start(new ProcessStartInfo(Application.ExecutablePath, "--apply-update " + encoded) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden });
+                UpdateInstaller.Start(store, state.Release, consentProfile);
             } catch { launching = false; status = "Could not start installation. Try again or download manually."; Render(); }
         }
         public void Dispose() {
@@ -630,19 +637,42 @@ namespace GhostUI {
         public UpdateRelease Release;
         public string Profile;
         public int Parent;
+        public long ParentStartedUtc;
+        public string Companion;
     }
     internal static class UpdateInstaller {
+        internal static void Start(UpdateStore store, UpdateRelease release, string profile) {
+            string companion = store.CompanionExecutable();
+            if (!String.Equals(companion, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Only the registered companion may start this update.");
+            // A different process name/path is essential: the ordinary installer
+            // stops all old GhostHandles processes while this helper must survive.
+            string folder = Path.Combine(store.Root, "helper-" + Guid.NewGuid().ToString("N"));
+            UpdateStore.SafeDirectory(folder);
+            string helper = Path.Combine(folder, "GhostUpdater.exe");
+            File.Copy(UpdateStore.IOPath(companion), UpdateStore.IOPath(helper), false);
+            File.Copy(UpdateStore.IOPath(companion + ".config"), UpdateStore.IOPath(helper + ".config"), false);
+            using (var parent = Process.GetCurrentProcess()) {
+                var request = new InstallRequest { Release = release, Profile = profile, Parent = parent.Id,
+                    ParentStartedUtc = parent.StartTime.ToUniversalTime().Ticks, Companion = companion };
+                string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(UpdateRules.Json().Serialize(request)));
+                using (Process.Start(new ProcessStartInfo(helper, "--apply-update " + encoded) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden })) { }
+            }
+        }
         internal static int Run(string encoded) {
-            UpdateStore store = null; bool parentStopped = false;
+            UpdateStore store = null; bool parentStopped = false; string companion = null;
             try {
                 if (encoded == null || encoded.Length > 16384) return 1;
                 var request = UpdateRules.Json().Deserialize<InstallRequest>(Encoding.UTF8.GetString(Convert.FromBase64String(encoded)));
                 store = new UpdateStore();
+                companion = store.CompanionExecutable();
                 if (request == null || !UpdateRules.Valid(request.Release) || !store.Profiles().Any(p => p.Path == request.Profile && UpdateRules.Compare(request.Release.Version, p.Version) > 0)) throw new InvalidDataException("Profile is not registered for this update.");
+                if (!String.Equals(request.Companion, companion, StringComparison.OrdinalIgnoreCase) ||
+                    Path.GetFileName(Application.ExecutablePath) != "GhostUpdater.exe") throw new InvalidDataException("Update helper identity is invalid.");
                 if (UpdateController.FirefoxRunning()) throw new IOException("Firefox is still running. No update was installed.");
                 // Parent must still be the consenting instance of this exact executable.
                 using (var parent = Process.GetProcessById(request.Parent)) {
-                    if (!String.Equals(parent.MainModule.FileName, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Update approval is no longer active.");
+                    if (!String.Equals(parent.MainModule.FileName, companion, StringComparison.OrdinalIgnoreCase) ||
+                        parent.StartTime.ToUniversalTime().Ticks != request.ParentStartedUtc) throw new InvalidDataException("Update approval is no longer active.");
                     string packageRoot = Extract(store, request.Release);
                     // Keep consent ephemeral: this process is the only handoff. There
                     // are no persisted install requests, scheduled tasks or retry jobs.
@@ -662,18 +692,18 @@ namespace GhostUI {
                         child.BeginOutputReadLine(); child.BeginErrorReadLine(); child.WaitForExit();
                         bool installed = child.ExitCode == 0 && store.Profiles().Any(p => p.Path == request.Profile && p.Version == request.Release.Version);
                         var state = store.Read(); state.Result = installed ? "Update installed. Start Firefox to apply it." : "Installation failed. Your backup was retained. Try manual installation."; store.Write(state);
-                        if (!installed) Restart();
+                        if (!installed) Restart(companion);
                         return installed ? 0 : 1;
                     }
                 }
             } catch {
                 if (store != null) { try { var state = store.Read(); state.Result = "Update was not installed. Try again or download manually."; store.Write(state); } catch { } }
-                if (parentStopped) { try { Restart(); } catch { } }
+                if (parentStopped && companion != null) { try { Restart(companion); } catch { } }
                 return 1;
             }
         }
-        private static void Restart() {
-            Process.Start(new ProcessStartInfo(Application.ExecutablePath) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden });
+        private static void Restart(string companion) {
+            Process.Start(new ProcessStartInfo(companion) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden });
         }
         internal static string Extract(UpdateStore store, UpdateRelease release) {
             string zip = store.Package(release);
