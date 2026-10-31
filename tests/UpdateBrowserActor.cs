@@ -51,10 +51,21 @@ namespace GhostUI {
                     }
                     var bounds = card.Bounds;
                     IntPtr owner = (IntPtr)Field(controller, "owner");
-                    var browserBounds = owner == IntPtr.Zero ? System.Drawing.Rectangle.Empty : Native.Bounds(owner);
                     IntPtr foreground = Native.GetForegroundWindow();
+                    IntPtr browserWindow = IntPtr.Zero;
+                    Native.EnumWindows(delegate(IntPtr window, IntPtr unused) {
+                        if (browserWindow != IntPtr.Zero) return true;
+                        uint pid; Native.GetWindowThreadProcessId(window, out pid);
+                        if ((int)pid == browser && Native.IsFirefox(window) && Native.Bounds(window).Width > 0) { browserWindow = window; }
+                        return true;
+                    }, IntPtr.Zero);
+                    var browserBounds = owner == IntPtr.Zero
+                        ? (browserWindow == IntPtr.Zero ? System.Drawing.Rectangle.Empty : Native.Bounds(browserWindow))
+                        : Native.Bounds(owner);
                     IntPtr detectedWindow = (IntPtr)Field(controller, "detectedWindow");
                     DateTime detectedAt = (DateTime)Field(controller, "detectedAt");
+                    var className = new System.Text.StringBuilder(64);
+                    Native.GetClassName(foreground, className, className.Capacity);
                     string result = UpdateRules.Json().Serialize(new {
                         actor = Process.GetCurrentProcess().Id, ack = acknowledged, visible = card.Visible,
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
@@ -64,11 +75,16 @@ namespace GhostUI {
                         approved = (DateTime)Field(controller, "consentUntil") > DateTime.UtcNow,
                         origin = Field(controller, "detectedOrigin"), profiles = card.Profiles.Items.Count,
                         inside = browserBounds.Contains(bounds),
+                        browserWindowFound = browserWindow != IntPtr.Zero,
+                        browserWindowIsForeground = browserWindow != IntPtr.Zero && foreground == browserWindow,
+                        browserWindowVisible = browserWindow != IntPtr.Zero && Native.IsWindowVisible(browserWindow),
+                        foregroundClass = className.ToString(),
                         ownerIsForeground = owner != IntPtr.Zero && foreground == owner,
                         detectedWindowMatch = detectedWindow == owner && owner != IntPtr.Zero,
                         freshnessMs = detectedAt == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - detectedAt).TotalMilliseconds,
                         browserWidth = browserBounds.Width, browserHeight = browserBounds.Height,
-                        zoomed = owner != IntPtr.Zero && Native.IsZoomed(owner), probing = (bool)Field(controller, "probing"),
+                        zoomed = (owner != IntPtr.Zero && Native.IsZoomed(owner)) || (browserWindow != IntPtr.Zero && Native.IsZoomed(browserWindow)),
+                        probing = (bool)Field(controller, "probing"),
                         session = Field(controller, "session")
                     });
                     string temp = Path.Combine(root, "status.tmp"), destination = Path.Combine(root, "status.json");
