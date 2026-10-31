@@ -2,7 +2,7 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
-## Unreleased
+## [1.2.0] - 2026-10-31
 
 ### Summary
 - Show update summaries and download controls inside the Firefox start page.
@@ -18,6 +18,7 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Support long update-cache and staging paths without changing Windows system policy.
 - Keep the update helper alive while the installer replaces the running companion.
 - Restore the update card if installation stops before the companion exits.
-- Native Firefox/DPI behavior and the installation handoff still require isolated Windows validation.
+- The update card and installer handoff were validated in real Firefox sessions.
+- Use HTTPS TLS 1.2 explicitly for GitHub update requests.
 
 Historical release notes remain on [GitHub Releases](https://github.com/DekrovDev/firefox-ghost-ui/releases).

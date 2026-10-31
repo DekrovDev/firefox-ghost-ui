@@ -223,6 +223,10 @@ namespace GhostUI {
         }
     }
     internal static class UpdateNetwork {
+        // GitHub serves update metadata and packages over TLS. System-default
+        // protocol selection may lack TLS 1.2 on legacy Framework
+        // configurations; keep system protocols and explicitly enable TLS 1.2.
+        static UpdateNetwork() { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
         internal static HttpWebResponse Open(Uri uri, bool api, CancellationToken token) {
             var request = (HttpWebRequest)WebRequest.Create(uri);
             request.AllowAutoRedirect = false; request.Timeout = 15000; request.ReadWriteTimeout = 15000;
