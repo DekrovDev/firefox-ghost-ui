@@ -610,9 +610,9 @@ namespace GhostUI {
             int page = pageGeneration;
             string[] origins = profiles.Select(p => p.Origin).Distinct().ToArray();
             var thread = new Thread(delegate() {
-                string origin = null; DateTime requestedAt = DateTime.UtcNow;
+                string origin = null;
                 try { origin = StartPageProbe.Origin(window, origins); } catch { }
-                Post(delegate { probing = false; if (page != pageGeneration) return; detectedWindow = window; detectedOrigin = origin; detectedAt = requestedAt; });
+                Post(delegate { probing = false; if (page != pageGeneration) return; detectedWindow = window; detectedOrigin = origin; detectedAt = DateTime.UtcNow; });
             });
             thread.IsBackground = true; thread.SetApartmentState(ApartmentState.MTA); thread.Start();
         }
