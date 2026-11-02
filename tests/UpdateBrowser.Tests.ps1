@@ -21,7 +21,10 @@ $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Browser actor compilation failed.' }
 Copy-Item -LiteralPath (Join-Path $root 'companion\GhostHandles.exe.config') -Destination ($actor + '.config')
 python (Join-Path $root 'tests\UpdateBrowser.Tests.py') --actor $actor --root $fixture
-if ($LASTEXITCODE -ne 0) { throw 'Real Firefox update-card fixture failed.' }
+$updateExitCode = $LASTEXITCODE
 Write-Output 'Running the complete toolbar regression harness in another disposable headless Firefox profile.'
 python (Join-Path $root 'tests/Toolbar.Tests.py')
-if ($LASTEXITCODE -ne 0) { throw 'Complete Firefox toolbar regression failed.' }
+$toolbarExitCode = $LASTEXITCODE
+if ($updateExitCode -ne 0 -or $toolbarExitCode -ne 0) {
+    throw "Firefox regression failed: update-card exit=$updateExitCode; toolbar exit=$toolbarExitCode."
+}

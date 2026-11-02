@@ -58,7 +58,9 @@ def main():
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if actor.poll() is not None:
-                raise AssertionError(f'Actor exited: {message}')
+                failure = root / 'actor-failure.txt'
+                detail = failure.read_text(encoding='utf-8-sig')[:12000] if failure.exists() and failure.stat().st_size <= 65536 else 'No bounded actor failure report.'
+                raise AssertionError(f'Actor exited: {message}\n{detail}')
             try:
                 last = json.loads((root / 'status.json').read_text(encoding='utf-8-sig'))
                 if last.get('actor') == actor.pid and predicate(last):
@@ -104,6 +106,7 @@ def main():
 
     def start_actor(expect_card=True):
         nonlocal actor
+        (root / 'actor-failure.txt').unlink(missing_ok=True)
         actor = toolbar.JobProcess([str(args.actor), str(root), str(browser.browser_pid)])
         wait(lambda s: True, 'Actor did not report state')
         command('focus')

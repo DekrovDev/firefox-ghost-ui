@@ -18,8 +18,11 @@ namespace GhostUI {
         [StructLayout(LayoutKind.Sequential)] private struct Input { internal uint Type; internal InputData Data; }
         [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
         private static void Send(Input[] inputs) {
-            if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) != inputs.Length)
-                throw new InvalidOperationException("Native fixture input was not delivered.");
+            int size = Marshal.SizeOf(typeof(Input));
+            uint sent = SendInput((uint)inputs.Length, inputs, size);
+            int error = Marshal.GetLastWin32Error();
+            if (sent != inputs.Length)
+                throw new InvalidOperationException("Native fixture input was not delivered: count=" + inputs.Length + ", sent=" + sent + ", size=" + size + ", error=" + error);
         }
         private static Input Key(ushort key, bool up) { return new Input { Type = 1, Data = new InputData { Keyboard = new KeyInput { Key = key, Flags = up ? 2u : 0u } } }; }
         private static void Shortcut() {
@@ -41,9 +44,14 @@ namespace GhostUI {
             if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" ||
                 Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted" || args.Length != 2) return 2;
             if (args[0] == "--apply-update") return UpdateInstaller.Run(args[1]);
+            string root = Path.GetFullPath(args[0]); int browser = Int32.Parse(args[1]);
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += delegate(object sender, System.Threading.ThreadExceptionEventArgs e) {
+                try { File.WriteAllText(Path.Combine(root, "actor-failure.txt"), e.Exception.ToString()); }
+                finally { Environment.Exit(1); }
+            };
             Native.EnablePhysicalCoordinates();
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
-            string root = Path.GetFullPath(args[0]); int browser = Int32.Parse(args[1]);
             using (var main = new Controller(null, null, true))
             using (var controller = new UpdateController(new UpdateStore(Path.Combine(root, "updates"))))
             using (var other = new Form { Text = "Unrelated application fixture", Width = 400, Height = 260 })
