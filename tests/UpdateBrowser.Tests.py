@@ -83,9 +83,10 @@ def main():
         browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', folder, headless=False)
         browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
         print(f'Firefox launcher PID={browser.process.pid}, browser PID={browser.browser_pid}', flush=True)
-        # Keep native input above hosted Windows' shell edge surfaces. Oversized
-        # browser bounds are covered separately by the card geometry fixtures.
-        browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1000, 'height': 620})
+        # ShellExperienceHost can display a surface at the hosted desktop's
+        # lower right. Keep native input in the unobstructed left-hand region;
+        # oversized bounds and scrolling have separate geometry checks below.
+        browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 620, 'height': 620})
         origin = None
         if with_extension:
             browser.command('Addon:Install', {'path': str(extension), 'temporary': True})
