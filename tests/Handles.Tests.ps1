@@ -35,6 +35,20 @@ function With-StateWriteFailure([int[]]$At, [scriptblock]$Action) {
     finally { & $module { param($Writer) Set-Item Function:script:Write-HandlesState $Writer } $original }
 }
 try {
+    # A process can exist before its named stop event, or exit without creating it.
+    $startupFolder = Join-Path $sandbox 'startup fixture'
+    [IO.Directory]::CreateDirectory($startupFolder) | Out-Null
+    $startupExecutable = Join-Path $startupFolder 'GhostHandles.exe'
+    $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+    & $compiler /nologo /target:exe ("/out:" + $startupExecutable) (Join-Path $root 'tests\HandlesStartupFixture.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Startup fixture compilation failed.' }
+    foreach ($mode in @('signal','exit')) {
+        $starting = Start-Process -FilePath $startupExecutable -ArgumentList $mode -WindowStyle Hidden -PassThru
+        try {
+            Stop-GhostHandles $startupExecutable
+            Assert ($starting.WaitForExit(10000) -and $starting.ExitCode -eq 0) ('Graceful stop handles startup race: ' + $mode)
+        } finally { $starting.Dispose() }
+    }
     foreach ($profile in @($profileA, $profileB)) {
         [IO.Directory]::CreateDirectory($profile) | Out-Null
         [IO.File]::WriteAllText((Join-Path $profile 'prefs.js'), '// isolated test profile')

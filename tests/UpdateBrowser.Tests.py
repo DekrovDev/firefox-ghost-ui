@@ -216,8 +216,10 @@ def main():
         assert str(second) in state['destination'] and not state['approved'], state
         command('cancel')
         browser.command('Marionette:SetContext', {'value': 'chrome'})
-        browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 400, 'height': 420})
-        wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] <= 420, 'Small-window manual card escaped Firefox')
+        # Firefox may clamp the requested width to its native minimum. Verify
+        # actual returned geometry and scrolling rather than an impossible width.
+        small = browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 400, 'height': 420})
+        wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] <= small['width'] and s['scrollsVertically'], 'Small-window manual card escaped Firefox or lost scrolling')
         browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1100, 'height': 820})
         wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] >= 1000, 'Expanded manual card escaped Firefox')
         stop_actor()

@@ -91,7 +91,15 @@ function Stop-GhostHandles([string]$Executable) {
     if (-not $owned.Count) { return }
     $signal = $null
     try {
-        $signal = [Threading.EventWaitHandle]::OpenExisting('Local\FirefoxGhostUIHandlesStop')
+        # Start-Process returns before the companion creates its stop event.
+        # Wait only for our exact executable; a process exiting during startup
+        # needs no stop signal. Never kill a process to resolve this race.
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        while (-not [Threading.EventWaitHandle]::TryOpenExisting('Local\FirefoxGhostUIHandlesStop', [ref]$signal)) {
+            if (-not @($owned | Where-Object { -not $_.HasExited }).Count) { return }
+            if ([DateTime]::UtcNow -ge $deadline) { throw 'Ghost UI handles is still starting. Wait a moment and retry.' }
+            Start-Sleep -Milliseconds 50
+        }
         $signal.Set() | Out-Null
         foreach ($item in $owned) {
             if (-not $item.WaitForExit(5000)) { throw 'Ghost UI handles did not stop. Exit it from its tray menu and retry.' }

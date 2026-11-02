@@ -14,6 +14,7 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Recognize native Firefox home and new-tab pages for automatic update cards.
 - Discover installed profiles independently of optional stylesheets, including older installations.
 - Preserve Firefox homepage settings, cached downloads, backups and explicit installation consent.
+- Wait for a starting companion's stop signal before uninstalling, without force-closing it.
 
 ## [1.2.1] - 2026-10-31
 

@@ -81,6 +81,7 @@ namespace GhostUI {
                         manual = card.Manual.Text, manualEnabled = card.Manual.Enabled,
                         ready = (bool)Field(controller, "ready"), confirming = card.Confirm.Visible,
                         primaryEnabled = card.Primary.Enabled, selectedProfile = card.Profiles.SelectedIndex,
+                        scrollsVertically = ((Panel)Field(card, "body")).VerticalScroll.Visible,
                         destination = card.Destination.Text,
                         launching = (bool)Field(controller, "launching"), status = card.StatusLabel.Text,
                         approved = (DateTime)Field(controller, "consentUntil") > DateTime.UtcNow,
