@@ -42,8 +42,10 @@ namespace GhostUI {
                 var card = (UpdateCard)Field(controller, "card");
                 int acknowledged = 0;
                 int openRequests = 0;
+                long mouseDownForeground = 0, clickForeground = 0;
                 bool shortcutClaimed = false;
-                card.OpenRequested += delegate { openRequests++; };
+                ((Button)Field(card, "launcher")).MouseDown += delegate { mouseDownForeground = Native.GetForegroundWindow().ToInt64(); };
+                card.OpenRequested += delegate { openRequests++; clickForeground = Native.GetForegroundWindow().ToInt64(); };
                 timer.Interval = 200;
                 timer.Tick += delegate {
                     string commandPath = Path.Combine(root, "command.json");
@@ -154,6 +156,7 @@ namespace GhostUI {
                         nativeOwner = Native.GetWindow(card.Handle, 4).ToInt64(), cardHandle = card.Handle.ToInt64(), foregroundHandle = foreground.ToInt64(),
                         shortcutRegistered = (bool)Field(card, "shortcutRegistered"),
                         openRequests = openRequests, shortcutClaimed = shortcutClaimed,
+                        mouseDownForeground = mouseDownForeground, clickForeground = clickForeground,
                         detectedWindowMatch = detectedWindow == owner && owner != IntPtr.Zero,
                         freshnessMs = detectedAt == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - detectedAt).TotalMilliseconds,
                         browserWidth = browserBounds.Width, browserHeight = browserBounds.Height,

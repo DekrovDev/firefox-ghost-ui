@@ -411,6 +411,15 @@ namespace GhostUI {
         internal readonly TextBox Destination;
         private bool shortcutRegistered;
         protected override bool ShowWithoutActivation { get { return true; } }
+        protected override CreateParams CreateParams {
+            get {
+                var parameters = base.CreateParams;
+                // An owned tool window stays out of the taskbar. Initial Show
+                // remains nonactivating, but explicit user input may focus it.
+                parameters.ExStyle = (parameters.ExStyle | 0x00000080) & ~0x08000000;
+                return parameters;
+            }
+        }
         internal UpdateCard() {
             Text = "Ghost UI updates"; AccessibleName = Text; ShowInTaskbar = false;
             FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual;
