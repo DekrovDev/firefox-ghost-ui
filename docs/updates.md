@@ -10,6 +10,8 @@ Automatic presentation reads accessibility roles/states and an active document U
 
 Native pages do not identify a Firefox profile. When multiple registered profiles are ambiguous, choose the destination explicitly; the installer never guesses it from a page title. The confirmation includes the full destination path in a scrollable field. Removing Bonjourr cannot remove a registered Ghost UI profile or its update settings. Existing installation state, check preferences and verified downloads remain usable after an upgrade.
 
+Placement uses the largest visible intersection of Firefox and a monitor's working area, keeping controls away from the taskbar and reachable when Firefox extends beyond the screen. If that visible area is too small, resize or return Firefox onscreen before opening settings.
+
 The card shows the new and installed versions, a short English summary, a profile selector, and these actions:
 
 - **Download** downloads and verifies the Windows ZIP. It does not change the installed version.

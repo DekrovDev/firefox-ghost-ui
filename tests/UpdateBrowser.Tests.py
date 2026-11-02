@@ -120,6 +120,11 @@ def main():
         actor.close()
         actor = None
 
+    def native_shortcut():
+        before = wait(lambda s: True, 'No status before keyboard input')['openRequests']
+        command('shortcut')
+        return wait(lambda s: s['openRequests'] > before, 'Native shortcut did not dispatch the real open event')
+
     try:
         origin = start_browser()
         start_actor()
@@ -198,18 +203,21 @@ def main():
         time.sleep(2)
         assert not wait(lambda s: s['launcherVisible'], 'Native manual entry vanished after Later')['visible']
         # Exercise the actual desktop-input path, not PerformClick/WM_HOTKEY.
+        state = wait(lambda s: s['launcherVisible'] and s['onScreen'], 'Compact entry is outside the visible working area')
+        print(f"Native entry geometry: card=({state['cardX']},{state['cardY']},{state['cardWidth']},{state['cardHeight']}), workArea={state['screenWidth']}x{state['screenHeight']}", flush=True)
         command('click-launcher')
-        wait(lambda s: s['visible'] and s['inside'], 'Actual launcher click did not open contained settings')
+        wait(lambda s: s['visible'] and s['inside'] and s['onScreen'], 'Actual launcher click did not open contained settings')
         command('later')
         wait(lambda s: s['launcherVisible'], 'Manual entry missing before native hotkey')
         command('focus')
         wait(lambda s: s['ownerIsForeground'], 'Firefox not foreground before native input')
-        command('shortcut')
+        native_shortcut()
         wait(lambda s: s['visible'] and s['cardIsForeground'], 'Ctrl+Alt+F8 did not open and focus settings')
         command('escape')
         wait(lambda s: s['launcherVisible'] and not s['visible'], 'Escape did not dismiss keyboard-opened settings')
         command('other')
         wait(lambda s: not s['visible'] and not s['launcherVisible'] and not s['shortcutRegistered'], 'Update surfaces or shortcut remained over another app')
+        assert command('claim-shortcut')['shortcutClaimed'], 'Unrelated app could not use the released shortcut'
         command('shortcut')
         time.sleep(.5)
         state = wait(lambda s: True, 'No status after background shortcut')
@@ -240,7 +248,7 @@ def main():
         time.sleep(1.5)
         state = wait(lambda s: True, 'Private-window probe did not report')
         assert state['launcherVisible'] and not state['visible'], state
-        command('shortcut')
+        native_shortcut()
         wait(lambda s: s['visible'] and s['cardIsForeground'], 'Private-window manual shortcut unavailable')
         command('later')
         browser.js('window.__ghostPrivate.close();delete window.__ghostPrivate;return true;')
@@ -265,12 +273,12 @@ def main():
         assert state['selectedProfile'] == -1 and not state['primaryEnabled'], state
         command('select-second')
         wait(lambda s: s['primaryEnabled'], 'Explicit profile selection did not enable installation')
-        command('shortcut')
+        native_shortcut()
         assert wait(lambda s: s['visible'], 'Repeated shortcut closed settings')['selectedProfile'] == 1
         command('install')
         state = wait(lambda s: s['confirming'], 'Selected destination did not require confirmation')
         assert str(second) in state['destination'] and not state['approved'], state
-        command('shortcut')
+        native_shortcut()
         state = wait(lambda s: s['visible'], 'Shortcut lost an open confirmation')
         assert state['confirming'] and state['selectedProfile'] == 1 and not state['approved'], state
         command('cancel')

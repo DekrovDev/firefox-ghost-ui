@@ -41,6 +41,9 @@ namespace GhostUI {
             using (var timer = new System.Windows.Forms.Timer()) {
                 var card = (UpdateCard)Field(controller, "card");
                 int acknowledged = 0;
+                int openRequests = 0;
+                bool shortcutClaimed = false;
+                card.OpenRequested += delegate { openRequests++; };
                 timer.Interval = 200;
                 timer.Tick += delegate {
                     string commandPath = Path.Combine(root, "command.json");
@@ -49,6 +52,12 @@ namespace GhostUI {
                         File.Delete(commandPath); acknowledged = Convert.ToInt32(command["id"]);
                         switch ((string)command["action"]) {
                             case "shortcut": Shortcut(); break;
+                            case "claim-shortcut":
+                                if (Native.GetForegroundWindow() != other.Handle) throw new InvalidDataException("Expected the unrelated fixture window in foreground.");
+                                shortcutClaimed = Native.RegisterHotKey(other.Handle, 88, 0x4003, 0x77);
+                                if (!shortcutClaimed) throw new InvalidOperationException("Another app could not claim the released update shortcut.");
+                                Native.UnregisterHotKey(other.Handle, 88);
+                                break;
                             case "clear-dismissals":
                                 var updateState = (UpdateState)Field(controller, "state");
                                 updateState.DismissedSession = null; updateState.DismissedVersion = null; updateState.DismissedSessions = null;
@@ -57,8 +66,9 @@ namespace GhostUI {
                             case "click-launcher":
                                 if (!card.Visible || !card.IsCompact) throw new InvalidDataException("Expected the real compact entry.");
                                 var center = new Point(card.Left + card.Width / 2, card.Top + card.Height / 2);
-                                if (Native.GetAncestor(Native.WindowFromPoint(center), 2) != card.Handle) throw new InvalidDataException("Launcher is covered by another window.");
                                 Cursor.Position = center;
+                                if (Cursor.Position != center) throw new InvalidDataException("Native cursor was clipped away from the launcher.");
+                                if (Native.GetAncestor(Native.WindowFromPoint(Cursor.Position), 2) != card.Handle) throw new InvalidDataException("Launcher is covered by another window.");
                                 Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } }, new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } });
                                 break;
                             case "focus-pid":
@@ -130,6 +140,10 @@ namespace GhostUI {
                         approved = (DateTime)Field(controller, "consentUntil") > DateTime.UtcNow,
                         origin = Field(controller, "detectedOrigin"), profiles = card.Profiles.Items.Count,
                         inside = browserBounds.Contains(bounds),
+                        onScreen = Array.Exists(Screen.AllScreens, screen => screen.WorkingArea.Contains(bounds)),
+                        screenWidth = Screen.PrimaryScreen.WorkingArea.Width, screenHeight = Screen.PrimaryScreen.WorkingArea.Height,
+                        cardX = card.Left, cardY = card.Top, cardWidth = card.Width, cardHeight = card.Height,
+                        cursorX = Cursor.Position.X, cursorY = Cursor.Position.Y,
                         browserWindowFound = browserWindow != IntPtr.Zero,
                         browserWindowIsForeground = browserWindow != IntPtr.Zero && foreground == browserWindow,
                         browserWindowVisible = browserWindow != IntPtr.Zero && Native.IsWindowVisible(browserWindow),
@@ -138,6 +152,7 @@ namespace GhostUI {
                         cardIsForeground = foreground == card.Handle || Native.GetAncestor(foreground, 2) == card.Handle,
                         owner = owner.ToInt64(), dpi = card.DeviceDpi,
                         shortcutRegistered = (bool)Field(card, "shortcutRegistered"),
+                        openRequests = openRequests, shortcutClaimed = shortcutClaimed,
                         detectedWindowMatch = detectedWindow == owner && owner != IntPtr.Zero,
                         freshnessMs = detectedAt == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - detectedAt).TotalMilliseconds,
                         browserWidth = browserBounds.Width, browserHeight = browserBounds.Height,

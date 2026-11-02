@@ -49,6 +49,10 @@ namespace GhostUI {
             if (url == "about:newtab" || url == "about:home") return url;
             return origins.FirstOrDefault(o => ValidOrigin(o) != null && (url == o || url == o + "index.html" || url == o + "index.html#"));
         }
+        internal static Rectangle VisibleBounds(Rectangle window, Rectangle[] workingAreas) {
+            return workingAreas.Select(area => Rectangle.Intersect(window, area))
+                .OrderByDescending(area => (long)area.Width * area.Height).FirstOrDefault();
+        }
         internal static bool IsDismissed(UpdateState state, string session, string version) {
             string dismissed;
             return state.DismissedSession == session && state.DismissedVersion == version ||
@@ -728,7 +732,7 @@ namespace GhostUI {
                 bool startPage = detectedWindow == firefox && detectedOrigin != null && now - detectedAt <= TimeSpan.FromMilliseconds(800);
                 bool compact = !manualOpen && (!offered || dismissed || !startPage);
                 card.SetCompact(compact);
-                Rectangle bounds = Native.Bounds(firefox);
+                Rectangle bounds = UpdateRules.VisibleBounds(Native.Bounds(firefox), Screen.AllScreens.Select(screen => screen.WorkingArea).ToArray());
                 if (!card.FitToWindow(bounds)) { card.Hide(); card.SetShortcutEnabled(false); return; }
                 int margin = Math.Max(16, Math.Min(32, card.Width / 24));
                 card.Location = new Point(bounds.Right - card.Width - margin, bounds.Bottom - card.Height - margin);
@@ -957,6 +961,8 @@ namespace GhostUI {
             }
             check(UpdateRules.IsDismissed(longRunning, "1:111", parsed.Version), "Ended-session churn cannot evict a live process reminder");
             string origin = "moz-extension://11111111-2222-3333-4444-555555555555/";
+            check(UpdateRules.VisibleBounds(new Rectangle(0, 0, 1100, 820), new[] { new Rectangle(0, 0, 1024, 728) }) == new Rectangle(0, 0, 1024, 728), "Update controls use the visible Firefox area above the taskbar");
+            check(UpdateRules.VisibleBounds(new Rectangle(-600, 50, 1100, 820), new[] { new Rectangle(0, 0, 1024, 728) }) == new Rectangle(0, 50, 500, 678), "Partially offscreen Firefox has bounded update-control placement");
             check(UpdateRules.StartPage("about:newtab", new string[0]) == "about:newtab", "Recognize ordinary Firefox new tabs without integrations");
             check(UpdateRules.StartPage("about:home", new string[0]) == "about:home", "Recognize ordinary Firefox home");
             foreach (string url in new[] { "about:blank", "about:privatebrowsing", "about:newtab#fake", "https://example.invalid/about:newtab", origin + "settings.html", origin + "index.html?fake=1", origin.Replace("555555555555", "666666666666") })
