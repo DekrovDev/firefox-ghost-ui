@@ -40,7 +40,10 @@ namespace GhostUI {
             if (Cursor.Position != center || hit != control.Handle) {
                 var blocker = Control.FromHandle(hit);
                 var className = new System.Text.StringBuilder(128); Native.GetClassName(hit, className, className.Capacity);
-                clickDetail = "Native control click is clipped or covered: target=" + control.GetType().Name + " bounds=" + control.Bounds + " visible=" + control.Visible + " cardVisible=" + card.Visible + " compact=" + card.IsCompact + " center=" + center + " hit=" + hit + " expected=" + control.Handle + " hitClass=" + className + " managed=" + (blocker == null ? "native" : blocker.GetType().Name);
+                uint blockerPid; Native.GetWindowThreadProcessId(hit, out blockerPid);
+                string blockerProcess = "unavailable";
+                try { using (var process = Process.GetProcessById((int)blockerPid)) blockerProcess = process.ProcessName; } catch (ArgumentException) { }
+                clickDetail = "Native control click is clipped or covered: target=" + control.GetType().Name + " bounds=" + control.Bounds + " visible=" + control.Visible + " cardVisible=" + card.Visible + " compact=" + card.IsCompact + " center=" + center + " hit=" + hit + " expected=" + control.Handle + " hitClass=" + className + " managed=" + (blocker == null ? "native" : blocker.GetType().Name) + " blockerProcess=" + blockerProcess + " blockerBounds=" + Native.Bounds(hit);
                 return;
             }
             Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } } });

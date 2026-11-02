@@ -83,7 +83,9 @@ def main():
         browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', folder, headless=False)
         browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
         print(f'Firefox launcher PID={browser.process.pid}, browser PID={browser.browser_pid}', flush=True)
-        browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1100, 'height': 820})
+        # Keep native input above hosted Windows' shell edge surfaces. Oversized
+        # browser bounds are covered separately by the card geometry fixtures.
+        browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1000, 'height': 620})
         origin = None
         if with_extension:
             browser.command('Addon:Install', {'path': str(extension), 'temporary': True})
@@ -146,6 +148,7 @@ def main():
         assert 'A short English update summary.' in state['summary'], state
         native_click('click-auto-check')
         wait(lambda s: s['autoChecks'] and s['visible'], 'Actual automatic-card checkbox click was lost')
+        time.sleep(.7)  # Two independent toggles, outside the OS double-click interval.
         native_click('click-auto-check')
         wait(lambda s: not s['autoChecks'], 'Actual automatic-card checkbox could not be toggled back')
         command('later')
