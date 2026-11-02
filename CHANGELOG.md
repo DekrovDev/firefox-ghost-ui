@@ -19,6 +19,7 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Preserve Later reminders independently across Firefox processes and explicit profile choices on F8.
 - Release the update shortcut outside eligible Firefox windows and require a new choice on ambiguity.
 - Keep update controls inside the visible Firefox area when its window extends offscreen.
+- Activate manual settings on a real launcher click while automatic cards stay nonactivating.
 
 ## [1.2.1] - 2026-10-31
 

@@ -151,6 +151,7 @@ namespace GhostUI {
                         ownerIsForeground = owner != IntPtr.Zero && foreground == owner,
                         cardIsForeground = foreground == card.Handle || Native.GetAncestor(foreground, 2) == card.Handle,
                         owner = owner.ToInt64(), dpi = card.DeviceDpi,
+                        nativeOwner = Native.GetWindow(card.Handle, 4).ToInt64(), cardHandle = card.Handle.ToInt64(), foregroundHandle = foreground.ToInt64(),
                         shortcutRegistered = (bool)Field(card, "shortcutRegistered"),
                         openRequests = openRequests, shortcutClaimed = shortcutClaimed,
                         detectedWindowMatch = detectedWindow == owner && owner != IntPtr.Zero,

@@ -167,7 +167,8 @@ def main():
         command('approve')
         # Simulate Firefox reopening between the parent check and the helper
         # check. The real helper must reject and the still-running card recover.
-        command('handoff-failure')
+        handoff = command('handoff-failure')
+        assert not handoff['shortcutRegistered'], 'A hidden installer handoff retained the update shortcut'
         wait(lambda s: not s['launching'] and s['visible'] and 'not installed' in s['status'], 'Failed pre-stop helper did not restore a retryable card')
         command('later')
         command('profile-current')
@@ -206,7 +207,8 @@ def main():
         state = wait(lambda s: s['launcherVisible'] and s['onScreen'], 'Compact entry is outside the visible working area')
         print(f"Native entry geometry: card=({state['cardX']},{state['cardY']},{state['cardWidth']},{state['cardHeight']}), workArea={state['screenWidth']}x{state['screenHeight']}", flush=True)
         command('click-launcher')
-        wait(lambda s: s['visible'] and s['inside'] and s['onScreen'], 'Actual launcher click did not open contained settings')
+        clicked = wait(lambda s: s['visible'] and s['inside'] and s['onScreen'], 'Actual launcher click did not open contained settings')
+        assert clicked['nativeOwner'] == clicked['owner'], 'Native update-card ownership detached from Firefox'
         command('later')
         wait(lambda s: s['launcherVisible'], 'Manual entry missing before native hotkey')
         command('focus')

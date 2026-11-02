@@ -420,6 +420,11 @@ namespace GhostUI {
             Controls.Add(body);
             launcher = new Button { Text = "Ghost UI updates", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, Visible = false, AccessibleName = "Open Ghost UI update settings" };
             launcher.FlatAppearance.BorderColor = Color.FromArgb(133, 123, 109);
+            launcher.MouseDown += delegate(object sender, MouseEventArgs e) {
+                // A real click authorizes activation; automatic display and
+                // programmatic opening must remain nonactivating.
+                if (e.Button == MouseButtons.Left && Visible && IsCompact) Native.SetForegroundWindow(Handle);
+            };
             launcher.Click += delegate { if (OpenRequested != null) OpenRequested(); };
             Controls.Add(launcher);
             var brand = LabelAt("GHOST UI", 22, 16, 330, 20); brand.Font = new Font(Font.FontFamily, 9, FontStyle.Bold);
@@ -542,7 +547,7 @@ namespace GhostUI {
                 if (top != IntPtr.Zero && (top == owner || top == detectedWindow) && ((objectId == 0 && childId == 0) || (kind >= 0x8006 && kind <= 0x8009)) &&
                     Interlocked.Exchange(ref invalidationQueued, 1) == 0) Post(delegate {
                     Interlocked.Exchange(ref invalidationQueued, 0);
-                    pageGeneration++; detectedOrigin = null; card.Hide(); nextProbe = DateTime.MinValue;
+                    pageGeneration++; detectedOrigin = null; if (!manualOpen) card.Hide(); nextProbe = DateTime.MinValue;
                 });
             };
             titleHook = SetWinEventHook(0x800c, 0x800c, IntPtr.Zero, windowEvent, 0, 0, 2); // Window title changes, skip own process.
@@ -774,7 +779,7 @@ namespace GhostUI {
         }
         private void LaunchInstall() {
             if (state.Release == null || state.Release.Version != consentVersion || !profiles.Any(p => p.Path == consentProfile)) { Cancel(); return; }
-            launching = true; card.Hide();
+            launching = true; card.Hide(); card.SetShortcutEnabled(false);
             consentUntil = DateTime.MinValue;
             try {
                 var helper = UpdateInstaller.Start(store, state.Release, consentProfile);
