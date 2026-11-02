@@ -579,8 +579,8 @@ namespace GhostUI {
             titleHook = SetWinEventHook(0x800c, 0x800c, IntPtr.Zero, windowEvent, 0, 0, 2); // Window title changes, skip own process.
             selectionHook = SetWinEventHook(0x8006, 0x8009, IntPtr.Zero, windowEvent, 0, 0, 2); // Tab/selection changes invalidate a pending probe.
             card.AutoCheck.Checked = !state.Disabled;
-            card.AutoCheck.CheckedChanged += delegate { state.Disabled = !card.AutoCheck.Checked; Save(); };
-            card.Primary.Click += delegate { if (ready) Confirm(); else Download(); };
+            card.AutoCheck.CheckedChanged += delegate { manualOpen = true; state.Disabled = !card.AutoCheck.Checked; Save(); };
+            card.Primary.Click += delegate { manualOpen = true; if (ready) Confirm(); else Download(); };
             card.Later.Click += delegate { Dismiss(); };
             card.DismissRequested += Dismiss;
             card.OpenRequested += OpenManually;
@@ -598,6 +598,7 @@ namespace GhostUI {
             };
             card.Changes.LinkClicked += delegate { OpenRelease(); };
             card.Profiles.SelectedIndexChanged += delegate { confirming = false; consentUntil = DateTime.MinValue; Render(); };
+            card.Profiles.SelectionChangeCommitted += delegate { manualOpen = true; };
             timer.Interval = 150; timer.Tick += delegate { Tick(); }; timer.Start();
             RefreshProfiles(); VerifyCache();
         }
@@ -652,6 +653,7 @@ namespace GhostUI {
             Task.Run(delegate { bool verified = store.Ready(release); Post(delegate { if (stamp == generation) { ready = verified; Render(); } }); });
         }
         private void Check(bool manual) {
+            if (manual) manualOpen = true;
             if (confirming || consentUntil != DateTime.MinValue) return;
             if (busy || DateTime.UtcNow < UpdateRules.Utc(state.RetryUtc)) {
                 if (manual) { status = "Please wait before checking again."; Render(); } return;

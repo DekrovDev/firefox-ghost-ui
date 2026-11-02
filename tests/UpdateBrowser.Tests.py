@@ -128,6 +128,15 @@ def main():
         command('shortcut')
         return wait(lambda s: s['openRequests'] > before, 'Native shortcut did not dispatch the real open event')
 
+    def native_click(action):
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            state = command(action)
+            if state['clickDelivered']:
+                return state
+            time.sleep(.2)
+        raise AssertionError(f'Native target never became ready; no click was sent: {state}')
+
     try:
         origin = start_browser()
         start_actor()
@@ -135,9 +144,9 @@ def main():
         assert state['origin'] == origin and state['inside'], state
         assert state['primary'] == 'Download' and state['manual'] == 'Download manually' and state['manualEnabled'], state
         assert 'A short English update summary.' in state['summary'], state
-        command('click-auto-check')
+        native_click('click-auto-check')
         wait(lambda s: s['autoChecks'] and s['visible'], 'Actual automatic-card checkbox click was lost')
-        command('click-auto-check')
+        native_click('click-auto-check')
         wait(lambda s: not s['autoChecks'], 'Actual automatic-card checkbox could not be toggled back')
         command('later')
         command('clear-dismissals')
@@ -218,7 +227,7 @@ def main():
         state = wait(lambda s: s['launcherVisible'] and s['onScreen'], 'Compact entry is outside the visible working area')
         mouse_opens = state['openRequests']
         print(f"Native entry geometry: card=({state['cardX']},{state['cardY']},{state['cardWidth']},{state['cardHeight']}), workArea={state['screenWidth']}x{state['screenHeight']}", flush=True)
-        command('click-launcher')
+        native_click('click-launcher')
         clicked = wait(lambda s: s['openRequests'] > mouse_opens and s['visible'] and s['inside'] and s['onScreen'], 'Actual launcher click did not open contained settings')
         assert clicked['nativeOwner'] == clicked['owner'], 'Native update-card ownership detached from Firefox'
         command('later')

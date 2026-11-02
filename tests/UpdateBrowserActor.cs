@@ -9,6 +9,8 @@ using System.Windows.Forms;
 
 namespace GhostUI {
     internal static class UpdateBrowserActor {
+        private static bool clickDelivered;
+        private static string clickDetail;
         [StructLayout(LayoutKind.Sequential)] private struct MouseInput { internal int X, Y; internal uint Data, Flags, Time; internal UIntPtr Extra; }
         [StructLayout(LayoutKind.Sequential)] private struct KeyInput { internal ushort Key, Scan; internal uint Flags, Time; internal UIntPtr Extra; }
         [StructLayout(LayoutKind.Explicit)] private struct InputData {
@@ -30,12 +32,27 @@ namespace GhostUI {
             finally { Send(new[] { Key(0x77, true), Key(0x12, true), Key(0x11, true) }); }
         }
         private static void Click(Control control, UpdateCard card) {
+            clickDelivered = false;
+            if (!card.Visible || !control.Visible || !control.Enabled) { clickDetail = "Native target is not currently visible/enabled."; return; }
             Point center = control.PointToScreen(new Point(control.Width / 2, control.Height / 2));
             Cursor.Position = center;
             IntPtr hit = Native.WindowFromPoint(center);
-            if (Cursor.Position != center || hit != control.Handle)
-                throw new InvalidDataException("Native control click is clipped or covered: target=" + control.GetType().Name + " bounds=" + control.Bounds + " center=" + center + " hit=" + hit + " expected=" + control.Handle);
-            Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } }, new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } });
+            if (Cursor.Position != center || hit != control.Handle) {
+                var blocker = Control.FromHandle(hit);
+                var className = new System.Text.StringBuilder(128); Native.GetClassName(hit, className, className.Capacity);
+                clickDetail = "Native control click is clipped or covered: target=" + control.GetType().Name + " bounds=" + control.Bounds + " visible=" + control.Visible + " cardVisible=" + card.Visible + " compact=" + card.IsCompact + " center=" + center + " hit=" + hit + " expected=" + control.Handle + " hitClass=" + className + " managed=" + (blocker == null ? "native" : blocker.GetType().Name);
+                return;
+            }
+            Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } } });
+            // The actor is on the UI thread. Let that thread process activation
+            // and MouseDown before releasing, as an external human/test driver would.
+            var release = new System.Windows.Forms.Timer { Interval = 100 };
+            release.Tick += delegate {
+                release.Stop(); release.Dispose();
+                Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } });
+            };
+            release.Start();
+            clickDelivered = true; clickDetail = "Native press delivered to the exact control HWND.";
         }
         private static object Field(object item, string name) {
             return item.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(item);
@@ -47,6 +64,7 @@ namespace GhostUI {
             string root = Path.GetFullPath(args[0]); int browser = Int32.Parse(args[1]);
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException += delegate(object sender, System.Threading.ThreadExceptionEventArgs e) {
+                try { Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } }); } catch { }
                 try { File.WriteAllText(Path.Combine(root, "actor-failure.txt"), e.Exception.ToString()); }
                 finally { Environment.Exit(1); }
             };
@@ -90,7 +108,6 @@ namespace GhostUI {
                                 break;
                             case "escape": Send(new[] { Key(0x1b, false), Key(0x1b, true) }); break;
                             case "click-launcher":
-                                if (!card.Visible || !card.IsCompact) throw new InvalidDataException("Expected the real compact entry.");
                                 Click((Button)Field(card, "launcher"), card);
                                 break;
                             case "focus-pid":
@@ -181,6 +198,8 @@ namespace GhostUI {
                         nativeOwner = Native.GetWindow(card.Handle, 4).ToInt64(), cardHandle = card.Handle.ToInt64(), foregroundHandle = foreground.ToInt64(),
                         shortcutRegistered = (bool)Field(card, "shortcutRegistered"),
                         openRequests = openRequests, shortcutClaimed = shortcutClaimed,
+                        manualOpen = (bool)Field(controller, "manualOpen"),
+                        clickDelivered = clickDelivered, clickDetail = clickDetail,
                         mouseDownForeground = mouseDownForeground, clickForeground = clickForeground,
                         mouseActivations = mouseActivations, activationControl = activationControl,
                         launcherEnabled = ((Button)Field(card, "launcher")).Enabled,
