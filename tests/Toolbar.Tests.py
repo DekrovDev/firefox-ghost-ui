@@ -53,6 +53,13 @@ class JobProcess:
                         ('process_memory', size_t), ('job_memory', size_t),
                         ('peak_process_memory', size_t), ('peak_job_memory', size_t)]
 
+        class BasicAccounting(ctypes.Structure):
+            _fields_ = [('user_time', ctypes.c_longlong), ('kernel_time', ctypes.c_longlong),
+                        ('period_user_time', ctypes.c_longlong), ('period_kernel_time', ctypes.c_longlong),
+                        ('page_faults', w.DWORD), ('total_processes', w.DWORD),
+                        ('active_processes', w.DWORD), ('terminated_processes', w.DWORD)]
+        self._accounting_type = BasicAccounting
+
         class StartupInfo(ctypes.Structure):
             _fields_ = [('cb', w.DWORD), ('reserved', w.LPWSTR), ('desktop', w.LPWSTR), ('title', w.LPWSTR),
                         ('x', w.DWORD), ('y', w.DWORD), ('width', w.DWORD), ('height', w.DWORD),
@@ -79,6 +86,7 @@ class JobProcess:
             'WaitForSingleObject': ([w.HANDLE, w.DWORD], w.DWORD),
             'GetExitCodeProcess': ([w.HANDLE, ctypes.POINTER(w.DWORD)], w.BOOL),
             'TerminateJobObject': ([w.HANDLE, w.UINT], w.BOOL),
+            'QueryInformationJobObject': ([w.HANDLE, ctypes.c_int, w.LPVOID, w.DWORD, w.LPVOID], w.BOOL),
         }
         for name, (arguments, result) in signatures.items():
             function = getattr(self.api, name)
@@ -162,15 +170,31 @@ class JobProcess:
 
     def close(self):
         atexit.unregister(self.close)
-        if self._job is not None:
-            self.check(self.api.CloseHandle(self._job))
-            self._job = None # Kernel stops the entire owned tree, including Firefox children.
-        if self._handle is not None:
-            try:
+        try:
+            if self._job is not None:
+                self.terminate()  # Only this fixture's atomically assigned process tree.
+            if self._handle is not None:
                 self.wait(8)
-            finally:
                 self.api.CloseHandle(self._handle)
                 self._handle = None
+            if self._job is not None:
+                deadline = time.monotonic() + 8
+                while True:
+                    accounting = self._accounting_type()
+                    self.check(self.api.QueryInformationJobObject(
+                        self._job, 1, ctypes.byref(accounting), ctypes.sizeof(accounting), None))
+                    if accounting.active_processes == 0:
+                        break
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Owned test process tree did not finish exiting before cleanup')
+                    time.sleep(.05)
+        finally:
+            if self._handle is not None:
+                self.api.CloseHandle(self._handle)
+                self._handle = None
+            if self._job is not None:
+                self.api.CloseHandle(self._job)  # Retain kill-on-close fallback on every error path.
+                self._job = None
 
 
 class Firefox:

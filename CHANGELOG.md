@@ -2,7 +2,7 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
-## Unreleased
+## [1.3.0] - 2026-11-02
 
 ### Summary
 - Use all Ghost UI features and update controls with ordinary Firefox, without Bonjourr.
@@ -20,6 +20,7 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Release the update shortcut outside eligible Firefox windows and require a new choice on ambiguity.
 - Keep update controls inside the visible Firefox area when its window extends offscreen.
 - Activate manual settings on a real launcher click while automatic cards stay nonactivating.
+- Validate automatically selected profile paths before creating installation checkpoints.
 
 ## [1.2.1] - 2026-10-31
 

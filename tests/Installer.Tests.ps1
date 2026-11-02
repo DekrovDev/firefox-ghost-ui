@@ -45,8 +45,28 @@ function Test-CombinedInstallerRollback {
     Assert ($moduleText.Contains($realRun)) 'Fixture redirects the exact production startup default'
     Write-TestFile $modulePath ($moduleText.Replace($realRun, $testRegistry))
     $oldLocalAppData = $env:LOCALAPPDATA
+    $oldAppData = $env:APPDATA
     $fixtureJunctions = @()
     try {
+        $env:APPDATA = Join-Path $fixture 'discovery app data'
+        $env:LOCALAPPDATA = Join-Path $fixture 'discovery local app data'
+        $discovered = Join-Path $fixture 'discovered profile'
+        Write-TestFile (Join-Path $discovered 'prefs.js') '// disposable discovered profile'
+        $target = Join-Path $fixture 'discovered chrome target'
+        $sentinel = Join-Path $target 'userChrome.css'
+        Write-TestFile $sentinel '/* preserve redirected target */'
+        $sentinelHash = (Get-FileHash -LiteralPath $sentinel).Hash
+        $link = Join-Path $discovered 'chrome'
+        $fixtureJunctions += $link
+        New-Item -ItemType Junction -Path $link -Target $target | Out-Null
+        Write-TestFile (Join-Path $env:APPDATA 'Mozilla\Firefox\profiles.ini') ("[Profile0]`nName=Disposable`nIsRelative=0`nPath=$discovered`nDefault=1`n")
+        $engine = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        $discoveryOutput = & $engine -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $fixture 'Install.ps1') -NoPrompt 2>&1 | Out-String
+        Assert ($LASTEXITCODE -eq 1 -and $discoveryOutput -match 'Redirected installer path') 'Discovered redirected profile fails during preflight'
+        Assert ((Get-FileHash -LiteralPath $sentinel).Hash -ceq $sentinelHash) 'Discovered profile preflight preserves redirected target'
+        Assert (-not (Test-Path -LiteralPath (Join-Path $target 'ghost-ui-backups'))) 'Discovered profile preflight creates no redirected checkpoint'
+        Assert (-not (Get-ItemProperty -LiteralPath $testRegistry -Name 'FirefoxGhostUIHandles' -ErrorAction SilentlyContinue)) 'Discovered profile preflight creates no startup registration'
+        $env:APPDATA = $oldAppData
         foreach ($isUpdate in @($false, $true)) {
             $name = if ($isUpdate) { 'update' } else { 'first install' }
             $profile = New-TestProfile ('combined ' + $name)
@@ -105,6 +125,7 @@ function Test-CombinedInstallerRollback {
             }
         } finally {
             $env:LOCALAPPDATA = $oldLocalAppData
+            $env:APPDATA = $oldAppData
             if (Test-Path -LiteralPath $testRegistry) { Remove-Item -LiteralPath $testRegistry }
         }
     }

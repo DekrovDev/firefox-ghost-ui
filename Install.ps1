@@ -6,6 +6,7 @@ try {
     Import-Module (Join-Path $PSScriptRoot 'scripts\GhostUI.psm1') -Force -DisableNameChecking
     . (Join-Path $PSScriptRoot 'scripts\Select-Profile.ps1')
     $profile = Select-GhostProfile $ProfilePath -NoPrompt:$NoPrompt
+    $profile = Assert-GhostProfile $profile
     Write-Host "Installing Firefox Ghost UI into:`n$profile"
     Wait-GhostFirefoxClosed -NoPrompt:$NoPrompt
     $themeModule = Get-Module GhostUI
