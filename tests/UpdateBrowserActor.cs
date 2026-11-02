@@ -29,8 +29,9 @@ namespace GhostUI {
         private static void Click(Control control, UpdateCard card) {
             Point center = control.PointToScreen(new Point(control.Width / 2, control.Height / 2));
             Cursor.Position = center;
-            if (Cursor.Position != center || Native.GetAncestor(Native.WindowFromPoint(center), 2) != card.Handle)
-                throw new InvalidDataException("Native control click is clipped or covered.");
+            IntPtr hit = Native.WindowFromPoint(center);
+            if (Cursor.Position != center || hit != control.Handle)
+                throw new InvalidDataException("Native control click is clipped or covered: target=" + control.GetType().Name + " bounds=" + control.Bounds + " center=" + center + " hit=" + hit + " expected=" + control.Handle);
             Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } }, new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } });
         }
         private static object Field(object item, string name) {
@@ -43,6 +44,7 @@ namespace GhostUI {
             Native.EnablePhysicalCoordinates();
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             string root = Path.GetFullPath(args[0]); int browser = Int32.Parse(args[1]);
+            using (var main = new Controller(null, null, true))
             using (var controller = new UpdateController(new UpdateStore(Path.Combine(root, "updates"))))
             using (var other = new Form { Text = "Unrelated application fixture", Width = 400, Height = 260 })
             using (var timer = new System.Windows.Forms.Timer()) {
@@ -81,11 +83,7 @@ namespace GhostUI {
                             case "escape": Send(new[] { Key(0x1b, false), Key(0x1b, true) }); break;
                             case "click-launcher":
                                 if (!card.Visible || !card.IsCompact) throw new InvalidDataException("Expected the real compact entry.");
-                                var center = new Point(card.Left + card.Width / 2, card.Top + card.Height / 2);
-                                Cursor.Position = center;
-                                if (Cursor.Position != center) throw new InvalidDataException("Native cursor was clipped away from the launcher.");
-                                if (Native.GetAncestor(Native.WindowFromPoint(Cursor.Position), 2) != card.Handle) throw new InvalidDataException("Launcher is covered by another window.");
-                                Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } }, new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } });
+                                Click((Button)Field(card, "launcher"), card);
                                 break;
                             case "focus-pid":
                                 int requested = Convert.ToInt32(command["pid"]);
@@ -143,6 +141,11 @@ namespace GhostUI {
                     DateTime detectedAt = (DateTime)Field(controller, "detectedAt");
                     var className = new System.Text.StringBuilder(64);
                     Native.GetClassName(foreground, className, className.Capacity);
+                    var foregroundControl = Control.FromHandle(foreground);
+                    var forms = new System.Collections.Generic.List<string>();
+                    foreach (Form form in Application.OpenForms)
+                        forms.Add(form.GetType().Name + ":" + (form.IsHandleCreated ? form.Handle.ToInt64() : 0) + ":" + form.Visible);
+                    var launcher = (Button)Field(card, "launcher");
                     string result = UpdateRules.Json().Serialize(new {
                         actor = Process.GetCurrentProcess().Id, ack = acknowledged, visible = card.Visible && !card.IsCompact,
                         launcherVisible = card.Visible && card.IsCompact, autoChecks = card.AutoCheck.Checked, checkEnabled = card.Check.Enabled,
@@ -174,6 +177,12 @@ namespace GhostUI {
                         mouseActivations = mouseActivations, activationControl = activationControl,
                         launcherEnabled = ((Button)Field(card, "launcher")).Enabled,
                         launcherActualVisible = ((Button)Field(card, "launcher")).Visible,
+                        launcherBounds = launcher.Bounds.ToString(), launcherCreated = launcher.IsHandleCreated,
+                        launcherHandle = launcher.IsHandleCreated ? launcher.Handle.ToInt64() : 0,
+                        bodyVisible = ((Panel)Field(card, "body")).Visible,
+                        foregroundControl = foregroundControl == null ? "native" : foregroundControl.GetType().Name,
+                        foregroundIsOther = other.IsHandleCreated && foreground == other.Handle,
+                        openForms = forms.ToArray(),
                         detectedWindowMatch = detectedWindow == owner && owner != IntPtr.Zero,
                         freshnessMs = detectedAt == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - detectedAt).TotalMilliseconds,
                         browserWidth = browserBounds.Width, browserHeight = browserBounds.Height,
@@ -185,7 +194,7 @@ namespace GhostUI {
                     File.WriteAllText(temp, result);
                     if (File.Exists(destination)) File.Replace(temp, destination, null); else File.Move(temp, destination);
                 };
-                timer.Start(); Application.Run(); timer.Stop();
+                timer.Start(); Application.Run(main); timer.Stop();
             }
             return 0;
         }
