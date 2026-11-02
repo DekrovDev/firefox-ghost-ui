@@ -2,6 +2,19 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
+## Unreleased
+
+### Summary
+- Use all Ghost UI features and update controls with ordinary Firefox, without Bonjourr.
+- Open update settings on any Firefox tab with the compact button or Ctrl+Alt+F8.
+- Choose the update profile explicitly when a start page cannot identify it.
+
+### Details
+- Keep one installer and release channel; Bonjourr styling remains optional.
+- Recognize native Firefox home and new-tab pages for automatic update cards.
+- Discover installed profiles independently of optional stylesheets, including older installations.
+- Preserve Firefox homepage settings, cached downloads, backups and explicit installation consent.
+
 ## [1.2.1] - 2026-10-31
 
 ### Summary

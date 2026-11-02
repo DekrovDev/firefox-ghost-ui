@@ -2,6 +2,8 @@
 
 A floating Firefox toolbar, hover sidebar and adaptive Windows window grips that keep browser controls within reach while leaving more room for the page.
 
+One Ghost UI works with ordinary Firefox or optional Bonjourr. It preserves your chosen home/new-tab page; no second edition or replacement start page is needed.
+
 [Download Latest](https://github.com/DekrovDev/firefox-ghost-ui/releases/latest) | [Documentation](docs/technical.md) | [Report Issue](https://github.com/DekrovDev/firefox-ghost-ui/issues)
 
 ![Firefox Ghost UI with a clean new tab, central search and a collapsed sidebar](docs/images/new-tab.png)
@@ -46,7 +48,7 @@ The installer saves backups and preserves existing settings. It installs a per-u
 
 ## Update and uninstall
 
-The companion can show an English update card inside your Bonjourr start page, including a short list of changes. **Download** prepares a package; **Install update** and its confirmation approve installation into the selected profile. Close Firefox normally when instructed. A downloaded update is offered again next Firefox session after **Later**; it is never installed merely because Firefox or Windows starts. **Download manually** opens the official release page for the ZIP method below. See [update behavior, trust and verification limits](docs/updates.md).
+The companion can show an English update card over a recognized Firefox home/new-tab or Bonjourr page, including a short list of changes. The compact **Ghost UI updates** button stays available on other Firefox tabs too; click it or press **Ctrl+Alt+F8** to open settings manually. **Download** prepares a package; **Install update** and its confirmation approve installation into the selected profile. Close Firefox normally when instructed. A downloaded update is offered again next Firefox session after **Later**; it is never installed merely because Firefox or Windows starts. **Download manually** opens the official release page for the ZIP method below. See [update behavior, trust and verification limits](docs/updates.md).
 
 To update, extract the newer release, close Firefox and run **Install.cmd**. The original pre-install backup is preserved; managed configuration blocks are not duplicated.
 
@@ -57,6 +59,8 @@ To uninstall, close Firefox and run **Uninstall.cmd**. Original managed files an
 [Bonjourr](https://bonjourr.fr/) is created by **[Tahoe Beetschen (morceaudebois)](https://github.com/morceaudebois)** and **[Victor Azevedo (victrme)](https://github.com/victrme)**. Tahoe gave permission for this compatibility integration, with attribution, separate installation and removal on request. Thank you for supporting the project! [Original Bonjourr source](https://github.com/victrme/Bonjourr).
 
 Bonjourr is optional and **installed separately** from its official source; it is not bundled with Ghost UI.
+
+Without Bonjourr, keep Firefox's normal start page. Toolbar, tabs, downloads, window grips and update controls remain available. With Bonjourr, only its scoped entrance/link styling is added; its widgets and settings remain its own. Installing or reinstalling Bonjourr later may require closing Firefox and rerunning **Install.cmd** to refresh its styling and page registration.
 
 - [Bonjourr](https://addons.mozilla.org/firefox/addon/bonjourr-startpage/) provides the screenshot's wallpaper, clock, weather and central search. Configure it yourself, then close Firefox and rerun **Install.cmd** for Ghost UI animations. Existing settings are preserved.
 

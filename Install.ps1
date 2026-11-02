@@ -56,10 +56,11 @@ try {
     Write-Host "`nInstalled. Start Firefox to apply Ghost UI." -ForegroundColor Green
     Write-Host "Backup: $($result.Backup)"
     Write-Host 'Adaptive window grips enabled. Ctrl+Alt+F9: move; Ctrl+Alt+F10: return to screen.'
+    Write-Host 'Ghost UI updates are available inside Firefox, with or without Bonjourr. Use the Ghost UI updates button or Ctrl+Alt+F8.'
     if ($result.BonjourrStyled) {
         Write-Host 'Bonjourr entrance animations were also installed. Existing Bonjourr settings and search were preserved.'
     } else {
-        Write-Host 'Optional: install Bonjourr in Firefox, close Firefox, then run Install.cmd again to add its animations.'
+        Write-Host 'Ordinary Firefox is fully supported. Optional: install Bonjourr, close Firefox, then run Install.cmd again to add its animations.'
         Write-Host 'https://addons.mozilla.org/firefox/addon/bonjourr-startpage/'
     }
     Write-Host 'Use Uninstall.cmd to restore your original CSS, five appearance preferences, and the bookmarks button addition.'

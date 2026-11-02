@@ -395,7 +395,7 @@ namespace GhostUI {
             menu.Items.Add("Exit", null, delegate { Application.Exit(); });
             tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "Ghost UI — adaptive window handles", ContextMenuStrip = menu, Visible = !testMode };
             tray.DoubleClick += delegate { Recover(); };
-            // Update UI is restricted to the Firefox start page. Test/demo modes
+            // Automatic update cards use start pages; manual access stays inside Firefox. Test/demo modes
             // never construct the network or accessibility update subsystem.
             if (!testMode && demo == null) {
                 try { updates = new UpdateController(); } catch { /* Grips remain available if update storage is inaccessible. */ }

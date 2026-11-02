@@ -4,19 +4,21 @@ Ghost UI checks the public [GitHub Releases](https://github.com/DekrovDev/firefo
 
 ## Where the card appears
 
-The Windows companion displays an owned, non-taskbar update card in the lower-right corner of an identified Bonjourr start page in the foreground Firefox window. It is a native overlay, not a modification of Bonjourr. It does not use Windows update notifications or add an update item to the tray. The card hides when the page cannot be positively identified, the window is too small, Firefox is minimized, another application is active, or the browser is fullscreen.
+The Windows companion automatically displays an owned, non-taskbar update card in the lower-right corner of a positively identified Firefox home/new-tab (`about:home`, `about:newtab`) or registered Bonjourr page. Bonjourr is optional. A compact **Ghost UI updates** button remains available inside foreground Firefox on other tabs too; click it or press **Ctrl+Alt+F8** to open the card manually. If another app already owns the shortcut, use the button. These are native overlays, not modifications to Firefox pages or Bonjourr. There are no Windows update notifications or update items in the tray. All update surfaces hide when Firefox is minimized, another application is active, or the browser is fullscreen. Very small windows hide the control; resize Firefox to at least 300 by 280 pixels. Smaller supported windows use a scrollable card.
 
-The companion reads accessibility roles/states and a document URL to match the Bonjourr origin already recorded in the installed profile's scoped stylesheet. It does not read page text, inject scripts or modify another extension. Accessibility availability and current Firefox behavior must be verified on supported Windows/Firefox builds; if identification fails, the card stays hidden. Tab transitions may have a brief polling delay. Other start pages are not currently supported.
+Automatic presentation reads accessibility roles/states and an active document URL, matching exact native start pages or optional Bonjourr origin metadata. Stylesheets are never update configuration. It does not read page text, inject scripts or modify another extension. If page identification fails, automatic expansion is suppressed and manual access remains available using verified Firefox window identity. Tab transitions may have a brief polling delay. Websites, `about:blank`, private pages and unregistered extensions never trigger automatic cards. Other start pages retain manual access.
+
+Native pages do not identify a Firefox profile. When multiple registered profiles are ambiguous, choose the destination explicitly; the installer never guesses it from a page title. The confirmation includes the full destination path in a scrollable field. Removing Bonjourr cannot remove a registered Ghost UI profile or its update settings. Existing installation state, check preferences and verified downloads remain usable after an upgrade.
 
 The card shows the new and installed versions, a short English summary, a profile selector, and these actions:
 
 - **Download** downloads and verifies the Windows ZIP. It does not change the installed version.
 - **Download manually** opens the official release page. Download and extract the whole Windows ZIP, close Firefox normally, and run `Install.cmd`.
 - **All changes** opens the full release notes on GitHub. If you skipped several releases, this summary describes the offered release; consult the full release history for earlier changes.
-- **Later** or the close button hides the card for the current Firefox process session. It reappears when you next start Firefox and open the Bonjourr page. Opening another new tab in the same session does not repeat a dismissed card.
+- **Later** or the close button hides the automatic card for the current Firefox process session. It reappears when you next start Firefox and open a supported start page. Opening another new tab in the same session does not repeat a dismissed card. You can still open settings manually.
 - **Check daily** controls automatic checks. **Check now** requests a check when the API cooldown permits it.
 
-When daily checks are disabled, a small **Ghost UI updates** button remains on the identified Bonjourr page after the card is dismissed or the profile is up to date. Click it to open settings, use **Check now**, or enable **Check daily** again. It follows the same Firefox-only visibility rules as the card.
+The compact **Ghost UI updates** button remains available when daily checks are disabled, after **Later**, when the profile is up to date, and before any release has been cached. Click it to use **Check now** or **Check daily**. Manual access works even when the current page cannot be identified; the full card never opens automatically over an unrelated page.
 
 ## Install a downloaded update
 

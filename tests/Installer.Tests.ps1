@@ -118,6 +118,8 @@ try {
     Assert ((Read-TestFile (Join-Path $fresh 'user.js')) -match 'browser.download.alwaysOpenPanel.*, false') 'Downloads list opens on demand'
     Assert ((Read-TestFile (Join-Path $fresh 'user.js')) -match 'browser.download.panel.shown.*, true') 'First download does not bypass on-demand panel setting'
     Assert (-not $r.BonjourrStyled) 'Missing Bonjourr does not block installation'
+    $ordinaryState = Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\state.json') | ConvertFrom-Json
+    Assert ($null -eq $ordinaryState.bonjourrOrigin) 'Ordinary Firefox records no optional integration'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\userChrome.css')) -match '@import') 'CSS uses import wrapper'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '--ghost-open-wait: 120ms;') 'Release includes responsive hover delay'
     Assert ((Read-TestFile (Join-Path $fresh 'chrome\ghost-ui\userChrome.css')) -match '#urlbar\[usertyping\]\[focused\]') 'Search autohide fix included'
@@ -255,6 +257,8 @@ try {
     Write-TestFile (Join-Path $existing 'prefs.js') $prefText
     $r = Install-GhostUI $existing $theme
     Assert $r.BonjourrStyled 'Installed Bonjourr detected'
+    $integrationState = Read-TestFile (Join-Path $existing 'chrome\ghost-ui\state.json') | ConvertFrom-Json
+    Assert ($integrationState.bonjourrOrigin -ceq 'moz-extension://11111111-2222-3333-4444-555555555555/') 'Bonjourr origin stored separately from stylesheet'
     $scoped = Read-TestFile (Join-Path $existing 'chrome\ghost-ui\userContent.css')
     Assert ($scoped -match '@-moz-document url-prefix\("moz-extension://11111111-2222-3333-4444-555555555555/') 'Bonjourr CSS scoped to exact extension'
     Assert ($scoped -notmatch '66666666-7777-8888-9999-000000000000') 'Other extensions are not styled'
@@ -294,11 +298,23 @@ try {
     $broken = New-TestProfile 'transaction'
     Write-TestFile (Join-Path $broken 'user.js') $user
     Write-TestFile (Join-Path $broken 'chrome\userChrome.css') $chrome
-    Write-TestFile (Join-Path $broken 'prefs.js') 'user_pref("extensions.webextensions.uuids", "invalid JSON");'
+    Write-TestFile (Join-Path $broken 'prefs.js') 'user_pref("browser.uiCustomization.state", "invalid JSON");'
     Expect-Failure { Install-GhostUI $broken $theme } 'Failed installation reports error'
     Assert ((Read-TestFile (Join-Path $broken 'user.js')) -ceq $user) 'Transaction restores user.js after failure'
     Assert ((Read-TestFile (Join-Path $broken 'chrome\userChrome.css')) -ceq $chrome) 'Transaction restores CSS after failure'
     Assert (-not (Test-Path -LiteralPath (Join-Path $broken 'chrome\ghost-ui\state.json'))) 'Failure leaves no installed state'
+
+    $optionalBroken = New-TestProfile 'optional integration unavailable'
+    Write-TestFile (Join-Path $optionalBroken 'prefs.js') 'user_pref("extensions.webextensions.uuids", "invalid JSON");'
+    $optionalResult = Install-GhostUI $optionalBroken $theme
+    Assert (-not $optionalResult.BonjourrStyled) 'Corrupt optional UUID metadata does not block ordinary Firefox'
+    Uninstall-GhostUI $optionalBroken | Out-Null
+    $baseTheme = Join-Path $sandbox 'base theme only'
+    Write-TestFile (Join-Path $baseTheme 'userChrome.css') (Read-TestFile (Join-Path $theme 'userChrome.css'))
+    $baseProfile = New-TestProfile 'no optional adapter asset'
+    $baseResult = Install-GhostUI $baseProfile $baseTheme
+    Assert (-not $baseResult.BonjourrStyled) 'Core installation does not require an optional stylesheet'
+    Uninstall-GhostUI $baseProfile | Out-Null
 
     $discovery = Join-Path $sandbox 'Firefox root'
     $p1 = Join-Path $discovery 'Profiles\one'

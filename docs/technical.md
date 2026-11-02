@@ -4,7 +4,7 @@
 
 ## CSS architecture and interaction
 
-`theme/userChrome.css` styles Firefox chrome; `theme/bonjourr.css` is scoped to the installed Bonjourr extension UUID. The glass sits behind stationary native control hit areas and popup anchors. The navigation rectangle explicitly disables native window dragging: pointer-event transparency alone does not disable the titlebar drag region. Submission collapse preserves a minimum 120-pixel address field in narrow windows and yields optional controls to overflow; customization/fullscreen disable submission animations.
+`theme/userChrome.css` styles Firefox chrome independently of the start page; optional `theme/bonjourr.css` is scoped to the installed Bonjourr extension UUID. One installer and companion support both ordinary Firefox and Bonjourr. The glass sits behind stationary native control hit areas and popup anchors. The navigation rectangle explicitly disables native window dragging: pointer-event transparency alone does not disable the titlebar drag region. Submission collapse preserves a minimum 120-pixel address field in narrow windows and yields optional controls to overflow; customization/fullscreen disable submission animations.
 
 - Hover anywhere along the usable top edge, or over the visible center pill. Opening starts after **120 ms** and the controls appear within about half a second.
 - Briefly crossing the edge on the way to a page header does not enable an invisible toolbar. After deliberate hovering, a growing hit area follows the visible glass so you can move into it while it opens. Controls become clickable as they appear; the full toolbar area activates after opening completes. The activation strip and center pill keep their size.
@@ -39,6 +39,8 @@
 | `browser.download.panel.shown` | `true` |
 
 - If Bonjourr's extension UUID exists in this profile, adds `userContent.css` scoped to that exact extension URL. No other pages or extensions receive these styles.
+
+Optional `bonjourrOrigin` metadata is stored separately in the existing schema-1 installation state. Profile registration and updates never depend on a stylesheet or Bonjourr. Older state files remain supported: the companion can resolve the exact Bonjourr UUID preference from bounded profile metadata. Missing or malformed integration metadata leaves the profile available with native Firefox start-page support and manual update access. The installer does not change homepage/new-tab preferences or create replacement widgets.
 
 The installer adds the native bookmarks menu button if it is absent, preserving existing toolbar placements. Uninstall removes only this addition and keeps later toolbar changes. A preexisting button or a layout enforced through `user.js` is left as configured; you can add **Bookmarks Menu** manually through Customize Toolbar.
 

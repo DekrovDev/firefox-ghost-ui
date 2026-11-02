@@ -31,6 +31,7 @@ namespace GhostUI {
                         switch ((string)command["action"]) {
                             case "open-settings": card.OpenSettings(); break;
                             case "enable-checks": card.AutoCheck.Checked = true; break;
+                            case "select-second": card.Profiles.SelectedIndex = 1; break;
                             case "profile-current":
                                 var profiles = (UpdateProfile[])Field(controller, "profiles");
                                 if (profiles.Length != 1) throw new InvalidDataException("Expected one disposable profile.");
@@ -79,6 +80,8 @@ namespace GhostUI {
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
                         manual = card.Manual.Text, manualEnabled = card.Manual.Enabled,
                         ready = (bool)Field(controller, "ready"), confirming = card.Confirm.Visible,
+                        primaryEnabled = card.Primary.Enabled, selectedProfile = card.Profiles.SelectedIndex,
+                        destination = card.Destination.Text,
                         launching = (bool)Field(controller, "launching"), status = card.StatusLabel.Text,
                         approved = (DateTime)Field(controller, "consentUntil") > DateTime.UtcNow,
                         origin = Field(controller, "detectedOrigin"), profiles = card.Profiles.Items.Count,

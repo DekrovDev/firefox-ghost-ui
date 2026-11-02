@@ -75,24 +75,30 @@ def main():
         temp.replace(root / 'command.json')
         return wait(lambda s: s['ack'] == command_id, f'Command {action} not acknowledged')
 
-    def start_browser():
+    def start_browser(with_extension=True):
         nonlocal browser
         browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', folder, headless=False)
         browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
         print(f'Firefox launcher PID={browser.process.pid}, browser PID={browser.browser_pid}', flush=True)
         browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1100, 'height': 820})
-        browser.command('Addon:Install', {'path': str(extension), 'temporary': True})
-        uuid = browser.js("return JSON.parse(Services.prefs.getStringPref('extensions.webextensions.uuids'))[arguments[0]];", [addon_id])
-        assert re.fullmatch(r'[0-9a-f-]{36}', uuid), 'Missing temporary extension origin'
-        origin = f'moz-extension://{uuid}/'
+        origin = None
+        if with_extension:
+            browser.command('Addon:Install', {'path': str(extension), 'temporary': True})
+            uuid = browser.js("return JSON.parse(Services.prefs.getStringPref('extensions.webextensions.uuids'))[arguments[0]];", [addon_id])
+            assert re.fullmatch(r'[0-9a-f-]{36}', uuid), 'Missing temporary extension origin'
+            origin = f'moz-extension://{uuid}/'
         profile = folder / 'profile'
         payload = profile / 'chrome/ghost-ui'
         payload.mkdir(exist_ok=True)
-        (payload / 'state.json').write_text(json.dumps({'version': '1.1.2'}), encoding='utf-8')
-        (payload / 'userContent.css').write_text(f'@-moz-document url-prefix("{origin}") {{}}', encoding='utf-8')
+        state = {'version': '1.1.2'}
+        if origin:
+            state['bonjourrOrigin'] = origin
+        (payload / 'state.json').write_text(json.dumps(state), encoding='utf-8')
+        # No stylesheet is needed to register this profile or identify its page.
+        (payload / 'userContent.css').unlink(missing_ok=True)
         (root / 'handles/installed.json').write_text(json.dumps({'profiles': [str(profile)], 'executable': str(args.actor.resolve())}), encoding='utf-8')
         browser.command('Marionette:SetContext', {'value': 'content'})
-        browser.command('WebDriver:Navigate', {'url': origin + 'index.html'})
+        browser.command('WebDriver:Navigate', {'url': origin + 'index.html' if origin else 'about:newtab'})
         return origin
 
     def start_actor(expect_card=True):
@@ -121,7 +127,7 @@ def main():
         assert state['primary'] == 'Download' and state['manual'] == 'Download manually' and state['manualEnabled'], state
         assert 'A short English update summary.' in state['summary'], state
         browser.command('WebDriver:Navigate', {'url': 'about:blank'})
-        wait(lambda s: not s['visible'], 'Card remained over an unrelated page')
+        wait(lambda s: not s['visible'] and s['launcherVisible'], 'Unrelated page did not retain only the manual entry')
         browser.command('WebDriver:Navigate', {'url': origin + 'index.html'})
         wait(lambda s: s['visible'], 'Card did not return to the start page')
         command('other')
@@ -166,8 +172,56 @@ def main():
         assert wait(lambda s: s['autoChecks'], 'Daily checks could not be enabled')['autoChecks']
         assert not json.loads((root / 'updates/updates.json').read_text(encoding='utf-8'))['Disabled']
         command('later')
-        wait(lambda s: not s['visible'] and not s['launcherVisible'], 'Up-to-date checks-on profile retained a launcher')
-        print('PASS: real Firefox extension URL/MSAA, native card bounds/summary/manual button, page/focus hiding, session dismissal, cached reminder, confirmation/cancellation, pre-stop helper failure recovery and disabled-check settings access', flush=True)
+        wait(lambda s: not s['visible'] and s['launcherVisible'], 'Up-to-date profile lost its manual entry')
+        stop_actor()
+        browser.close()
+        browser = None
+        start_browser(False)
+        start_actor()
+        state = wait(lambda s: s['visible'] and s['origin'] == 'about:newtab', 'Native Firefox new-tab card did not appear without Bonjourr or CSS')
+        assert state['profiles'] == 1 and state['inside'], state
+        browser.command('WebDriver:Navigate', {'url': 'about:home'})
+        wait(lambda s: s['visible'] and s['origin'] == 'about:home', 'Native Firefox home card did not appear')
+        browser.command('WebDriver:Navigate', {'url': 'about:blank'})
+        wait(lambda s: s['launcherVisible'] and not s['visible'], 'Blank page automatically expanded the card')
+        command('open-settings')
+        state = wait(lambda s: s['visible'] and s['checkEnabled'], 'Manual settings unavailable on an ordinary tab')
+        assert state['autoChecks'], state
+        command('install')
+        wait(lambda s: s['confirming'], 'Native profile installation skipped confirmation')
+        command('cancel')
+        wait(lambda s: not s['approved'] and not s['confirming'], 'Native profile cancellation failed')
+        command('later')
+        browser.command('WebDriver:Navigate', {'url': 'about:newtab'})
+        time.sleep(2)
+        assert not wait(lambda s: s['launcherVisible'], 'Native manual entry vanished after Later')['visible']
+        # Native URLs cannot select between two registered profiles.
+        second = root / 'second-profile'
+        (second / 'chrome/ghost-ui').mkdir(parents=True)
+        (second / 'prefs.js').write_text('// synthetic profile', encoding='utf-8')
+        (second / 'chrome/ghost-ui/state.json').write_text('{"version":"1.2.1"}', encoding='utf-8')
+        registration = root / 'handles/installed.json'
+        registered = json.loads(registration.read_text(encoding='utf-8'))
+        registered['profiles'].append(str(second))
+        registration.write_text(json.dumps(registered), encoding='utf-8')
+        wait(lambda s: s['profiles'] == 2, 'A profile without optional CSS was excluded')
+        command('open-settings')
+        state = wait(lambda s: s['visible'], 'Ambiguous-profile settings did not open')
+        assert state['selectedProfile'] == -1 and not state['primaryEnabled'], state
+        command('select-second')
+        wait(lambda s: s['primaryEnabled'], 'Explicit profile selection did not enable installation')
+        command('install')
+        state = wait(lambda s: s['confirming'], 'Selected destination did not require confirmation')
+        assert str(second) in state['destination'] and not state['approved'], state
+        command('cancel')
+        stop_actor()
+        (root / 'updates/updates.json').write_text('{"Disabled":true}', encoding='utf-8')
+        start_actor(False)
+        wait(lambda s: s['profiles'] == 2 and s['launcherVisible'], 'No-release state lost manual access')
+        command('open-settings')
+        state = wait(lambda s: s['visible'] and s['checkEnabled'], 'First manual check is unreachable without cached metadata')
+        assert state['title'] == 'Ghost UI updates' and not state['autoChecks'] and not state['approved'], state
+        print('PASS: extension and native Firefox URL/MSAA, no-Bonjourr/no-CSS registration, native home/newtab automatic cards, manual access on other tabs, daily settings, foreground hiding, session/cache reminders, confirmation/cancellation and handoff recovery', flush=True)
     finally:
         if actor is not None:
             actor.close()

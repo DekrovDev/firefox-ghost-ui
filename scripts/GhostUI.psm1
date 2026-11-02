@@ -238,7 +238,7 @@ function Get-GhostWrapper([string]$Kind, [bool]$ImportPrevious) {
 
 function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
     $profile = Assert-GhostProfile $ProfilePath
-    foreach ($name in @('userChrome.css', 'bonjourr.css')) {
+    foreach ($name in @('userChrome.css')) {
         if (-not (Test-GhostFile (Join-Path $ThemePath $name))) { throw "Missing theme file: $name" }
     }
     $state = Get-GhostState $profile
@@ -282,12 +282,18 @@ function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
         $uuidPref = Get-GhostPreference (Read-GhostText (Join-Path $profile 'prefs.js')) 'extensions.webextensions.uuids'
         $bonjourrUUID = $null
         if ($uuidPref.exists) {
-            $map = $uuidPref.value | ConvertFrom-Json
-            $prop = $map.PSObject.Properties['{4f391a9e-8717-4ba6-a5b1-488a34931fcb}']
-            if ($prop -and $prop.Value -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { $bonjourrUUID = $prop.Value }
+            try {
+                $map = $uuidPref.value | ConvertFrom-Json
+                $prop = $map.PSObject.Properties['{4f391a9e-8717-4ba6-a5b1-488a34931fcb}']
+                if ($prop -and $prop.Value -cmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { $bonjourrUUID = $prop.Value.ToLowerInvariant() }
+            } catch { Write-Warning 'Optional Bonjourr integration metadata is unavailable. Core installation will continue.' }
         }
         $content = "/* Bonjourr is optional. Run Install.cmd again after adding it. */`r`n"
-        if ($bonjourrUUID) {
+        $bonjourrStyled = $bonjourrUUID -and (Test-GhostFile (Join-Path $ThemePath 'bonjourr.css'))
+        $bonjourrOrigin = if ($bonjourrUUID) { "moz-extension://$bonjourrUUID/" } else { $null }
+        # Additive metadata keeps schema-1 backups and older installers readable.
+        $state | Add-Member -NotePropertyName bonjourrOrigin -NotePropertyValue $bonjourrOrigin -Force
+        if ($bonjourrStyled) {
             $content = "/* Ghost UI: scoped to this profile's Bonjourr extension only. */`r`n@-moz-document url-prefix(`"moz-extension://$bonjourrUUID/`") {`r`n" + (Read-GhostText (Join-Path $ThemePath 'bonjourr.css')) + "`r`n}`r`n"
         }
         Write-GhostText (Join-Path $payload 'userContent.css') $content
@@ -312,7 +318,7 @@ function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
         $state.hashes = $hashes
         $state.version = $script:Version
         Write-GhostText (Join-Path $payload 'state.json') ($state | ConvertTo-Json -Depth 8)
-        return [pscustomobject]@{ Profile = $profile; Backup = $backup; BonjourrStyled = [bool]$bonjourrUUID }
+        return [pscustomobject]@{ Profile = $profile; Backup = $backup; BonjourrStyled = [bool]$bonjourrStyled }
     } catch {
         Restore-GhostSnapshot $profile $transaction $rollback
         throw

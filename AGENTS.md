@@ -12,7 +12,8 @@ Read this file before changing this project.
 
 ## Update contract
 
-- Update UI appears only inside Firefox: a companion-owned overlay over a positively identified, visible Bonjourr start page. No Windows update notifications, update tray items or separate update taskbar window.
+- Update UI appears only inside a verified foreground Firefox window. Automatically expand cards only over a positively identified, visible Bonjourr, about:newtab or about:home document. Keep a compact manual entry available on other tabs and when page identification fails; expanding it there requires a user action. No Windows update notifications, update tray items or separate update taskbar window.
+- Bonjourr is optional. Profile registration, update settings, downloads and installation must work without it or its stylesheet. Never infer a profile from a native about page; require explicit selection when multiple profiles are ambiguous.
 - Always display the short English summary. If unavailable, say so; never invent a summary.
 - Offer `Download`, `Download manually`, `Later`, and `All changes`. Manual download opens the official release page for ZIP installation with `Install.cmd`.
 - Keep Check now and Check daily reachable inside Firefox when automatic checks are disabled, even if every profile is up to date.

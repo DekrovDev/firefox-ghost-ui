@@ -40,6 +40,14 @@ namespace GhostUI {
     }
     public static class UpdateRules {
         public const string Repository = "https://github.com/DekrovDev/firefox-ghost-ui";
+        internal const string BonjourrId = "{4f391a9e-8717-4ba6-a5b1-488a34931fcb}";
+        internal static string ValidOrigin(string value) {
+            return value != null && Regex.IsMatch(value, @"\Amoz-extension://[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/\z") ? value : null;
+        }
+        internal static string StartPage(string url, string[] origins) {
+            if (url == "about:newtab" || url == "about:home") return url;
+            return origins.FirstOrDefault(o => ValidOrigin(o) != null && (url == o || url == o + "index.html" || url == o + "index.html#"));
+        }
         public const long MaxPackage = 64 * 1024 * 1024;
         internal static JavaScriptSerializer Json() { return new JavaScriptSerializer { MaxJsonLength = 1024 * 1024, RecursionLimit = 24 }; }
         internal static object[] ArrayValue(object value) {
@@ -216,15 +224,31 @@ namespace GhostUI {
                         string full = Path.GetFullPath(path);
                         if (path != full || path.IndexOf('"') >= 0 || path.Any(Char.IsControl)) continue;
                         var state = UpdateRules.Json().Deserialize<Dictionary<string, object>>(ReadSmall(Path.Combine(path, "chrome", "ghost-ui", "state.json"), 262144));
-                        string version = state.ContainsKey("version") ? state["version"] as string : null;
+                        string version = state != null && state.ContainsKey("version") ? state["version"] as string : null;
                         if (!UpdateRules.VersionValid(version) || !File.Exists(IOPath(Path.Combine(path, "prefs.js")))) continue;
-                        string css = ReadSmall(Path.Combine(path, "chrome", "ghost-ui", "userContent.css"), 1024 * 1024);
-                        Match origin = Regex.Match(css, @"moz-extension://[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/");
-                        if (origin.Success) result.Add(new UpdateProfile { Path = path, Version = version, Origin = origin.Value });
+                        // Core identity never depends on optional integration or CSS.
+                        string origin = null;
+                        if (state.ContainsKey("bonjourrOrigin")) origin = UpdateRules.ValidOrigin(state["bonjourrOrigin"] as string);
+                        else {
+                            // Legacy schema-1 profiles: read only the exact UUID
+                            // preference, never treat arbitrary stylesheet URLs as config.
+                            try { origin = LegacyBonjourrOrigin(ReadSmall(Path.Combine(path, "prefs.js"), 2 * 1024 * 1024)); }
+                            catch (IOException) { } catch (UnauthorizedAccessException) { } catch (ArgumentException) { } catch (InvalidOperationException) { }
+                        }
+                        result.Add(new UpdateProfile { Path = path, Version = version, Origin = origin });
                     } catch (IOException) { } catch (ArgumentException) { } catch (InvalidOperationException) { }
                 }
                 return result.GroupBy(p => p.Path, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToArray();
             } catch (IOException) { return new UpdateProfile[0]; } catch (ArgumentException) { return new UpdateProfile[0]; } catch (InvalidOperationException) { return new UpdateProfile[0]; }
+        }
+        internal static string LegacyBonjourrOrigin(string preferences) {
+            MatchCollection found = Regex.Matches(preferences, @"(?m)^user_pref\(""extensions\.webextensions\.uuids"", (""(?:[^""\r\n\\]|\\.)*"")\);\r?$");
+            if (found.Count != 1) return null;
+            string encoded = UpdateRules.Json().Deserialize<string>(found[0].Groups[1].Value);
+            var map = UpdateRules.Json().Deserialize<Dictionary<string, object>>(encoded);
+            object uuid;
+            return map != null && map.TryGetValue(UpdateRules.BonjourrId, out uuid) && uuid is string
+                ? UpdateRules.ValidOrigin("moz-extension://" + ((string)uuid).ToLowerInvariant() + "/") : null;
         }
         internal string CompanionExecutable() {
             string handles = Path.Combine(Path.GetDirectoryName(Root), "handles");
@@ -327,7 +351,7 @@ namespace GhostUI {
                 string url = item.get_accValue(0);
                 // Never descend into documents or inspect their contents. Do not
                 // accept title matching: websites can choose their own title.
-                return origins.FirstOrDefault(o => url == o + "index.html" || url == o + "index.html#" || url == o);
+                return UpdateRules.StartPage(url, origins);
             }
             int count = Math.Min(256, item.accChildCount);
             for (int start = 0; start < count && budget > 0; start += 32) {
@@ -348,7 +372,7 @@ namespace GhostUI {
     internal sealed class UpdateCard : Form {
         internal event Action DismissRequested;
         internal event Action OpenRequested;
-        private readonly Panel body = new Panel { Dock = DockStyle.Fill };
+        private readonly Panel body = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         private readonly Button launcher;
         internal bool IsCompact { get; private set; }
         internal readonly Label TitleLabel, VersionLabel, SummaryLabel, StatusLabel;
@@ -356,6 +380,8 @@ namespace GhostUI {
         internal readonly LinkLabel Changes;
         internal readonly ComboBox Profiles;
         internal readonly CheckBox AutoCheck;
+        internal readonly TextBox Destination;
+        private bool shortcutRegistered;
         protected override bool ShowWithoutActivation { get { return true; } }
         internal UpdateCard() {
             Text = "Ghost UI updates"; AccessibleName = Text; ShowInTaskbar = false;
@@ -386,6 +412,10 @@ namespace GhostUI {
             AutoCheck = new CheckBox { Text = "Check daily", Left = 22, Top = 436, Width = 190, Height = 24, Checked = true, AccessibleName = "Check for updates daily" };
             body.Controls.Add(AutoCheck);
             Check = ButtonAt("Check now", 256, 432, 168, 28, false);
+            Destination = new TextBox { Left = 22, Top = 472, Width = 402, Height = 80, Multiline = true,
+                ReadOnly = true, ScrollBars = ScrollBars.Vertical, Visible = false, AccessibleName = "Installation destination",
+                BackColor = BackColor, ForeColor = ForeColor };
+            body.Controls.Add(Destination);
             close.Click += delegate { if (DismissRequested != null) DismissRequested(); };
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; if (DismissRequested != null) DismissRequested(); } };
         }
@@ -396,7 +426,32 @@ namespace GhostUI {
             ClientSize = compact ? new Size((int)(176 * scale), (int)(38 * scale)) : new Size((int)(448 * scale), (int)(472 * scale));
             body.Visible = !compact; launcher.Visible = compact;
         }
+        internal bool FitToWindow(Rectangle bounds) {
+            float scale = DeviceDpi / 96f;
+            Size desired = IsCompact ? new Size((int)(176 * scale), (int)(38 * scale))
+                : new Size((int)(448 * scale), (int)((Destination.Visible ? 562 : 472) * scale));
+            body.AutoScrollMinSize = IsCompact ? Size.Empty : desired;
+            if (bounds.Width < 300 || bounds.Height < 280) return false;
+            Size fitted = new Size(Math.Min(desired.Width, bounds.Width - 64), Math.Min(desired.Height, bounds.Height - 100));
+            if (ClientSize != fitted) ClientSize = fitted;
+            return true;
+        }
         internal void OpenSettings() { launcher.PerformClick(); }
+        internal void RegisterShortcut() { shortcutRegistered = Native.RegisterHotKey(Handle, 3, 0x4003, 0x77); } // Ctrl+Alt+F8
+        protected override void WndProc(ref Message message) {
+            if (message.Msg == 0x0312 && message.WParam.ToInt32() == 3 && Visible) {
+                IntPtr foreground = Native.GetForegroundWindow();
+                if (Native.IsFirefox(foreground) || foreground == Handle || Native.GetAncestor(foreground, 2) == Handle) {
+                    if (OpenRequested != null) OpenRequested();
+                    Native.SetForegroundWindow(Handle);
+                }
+            }
+            base.WndProc(ref message);
+        }
+        protected override void Dispose(bool disposing) {
+            if (disposing && shortcutRegistered) { Native.UnregisterHotKey(Handle, 3); shortcutRegistered = false; }
+            base.Dispose(disposing);
+        }
         protected override bool ProcessCmdKey(ref Message message, Keys key) {
             if (key == Keys.Escape) { if (DismissRequested != null) DismissRequested(); return true; }
             return base.ProcessCmdKey(ref message, key);
@@ -466,7 +521,7 @@ namespace GhostUI {
             card.Primary.Click += delegate { if (ready) Confirm(); else Download(); };
             card.Later.Click += delegate { Dismiss(); };
             card.DismissRequested += Dismiss;
-            card.OpenRequested += delegate { manualOpen = true; card.SetCompact(false); Render(); };
+            card.OpenRequested += delegate { manualOpen = true; SelectContextProfile(); card.SetCompact(false); Render(); };
             card.Cancel.Click += delegate { Cancel(); };
             card.Confirm.Click += delegate { Consent(); };
             card.Check.Click += delegate { Check(true); };
@@ -479,6 +534,7 @@ namespace GhostUI {
             card.Changes.LinkClicked += delegate { OpenRelease(); };
             card.Profiles.SelectedIndexChanged += delegate { confirming = false; consentUntil = DateTime.MinValue; Render(); };
             timer.Interval = 150; timer.Tick += delegate { Tick(); }; timer.Start();
+            card.RegisterShortcut();
             RefreshProfiles(); VerifyCache();
         }
         private void Post(Action action) {
@@ -503,10 +559,14 @@ namespace GhostUI {
                     string selected = Selected == null ? null : Selected.Path;
                     profiles = found; card.Profiles.Items.Clear(); card.Profiles.Items.AddRange(found);
                     card.Profiles.SelectedIndex = Math.Max(-1, Array.FindIndex(found, p => p.Path == selected));
-                    if (card.Profiles.SelectedIndex < 0 && found.Length > 0) card.Profiles.SelectedIndex = 0;
+                    if (card.Profiles.SelectedIndex < 0) SelectContextProfile();
                     Render();
                 });
             });
+        }
+        private void SelectContextProfile() {
+            var matching = profiles.Where(p => p.Origin != null && p.Origin == detectedOrigin).ToArray();
+            card.Profiles.SelectedItem = matching.Length == 1 ? matching[0] : profiles.Length == 1 ? profiles[0] : null;
         }
         private void VerifyCache() {
             var release = state.Release; int stamp = ++generation; ready = false;
@@ -556,6 +616,7 @@ namespace GhostUI {
         }
         private void Confirm() {
             if (Selected == null || busy || !ready) return;
+            manualOpen = true;
             confirming = true;
             status = "Install to the selected profile? Then close Firefox normally within 2 minutes. Cancel to keep your current version.";
             Render();
@@ -588,6 +649,9 @@ namespace GhostUI {
             card.TitleLabel.Text = release == null ? "Ghost UI updates" : selected != null && UpdateRules.Compare(release.Version, selected.Version) <= 0 ? "This profile is up to date" : ready ? "Ready to install" : "Update available";
             card.VersionLabel.Text = release == null ? "Check for Ghost UI updates" : "Version " + release.Version + (selected == null ? "" : " - installed " + selected.Version);
             card.SummaryLabel.Text = release == null || release.Summary == null || release.Summary.Length == 0 ? "Release notes unavailable. See All changes." : String.Join("\n", release.Summary.Select(s => "\u2022 " + s));
+            card.Destination.Visible = confirming || approved;
+            card.Destination.Text = selected == null ? "Select the Firefox profile to update." : "Install version " + (release == null ? "" : release.Version) + " to:\r\n" + selected.Path;
+            card.Profiles.AccessibleDescription = selected == null ? "Choose an installed Firefox profile explicitly." : selected.Path;
             card.StatusLabel.Text = release != null && !UpdateRules.Valid(release) ? "Automatic download unavailable. Choose Download manually." : status ?? (ready ? "Downloaded and verified. Installation needs your permission." : "Installation always needs your permission.");
             card.Primary.Text = ready ? "Install update" : "Download";
             card.Primary.Enabled = !busy && UpdateRules.Valid(release) && selected != null && UpdateRules.Compare(release.Version, selected.Version) > 0;
@@ -610,7 +674,6 @@ namespace GhostUI {
                 }
                 if (now - profileCheckedAt > TimeSpan.FromSeconds(10) || profiles.Length == 0) { card.Hide(); return; }
                 bool offered = state.Release != null && profiles.Any(p => UpdateRules.Compare(state.Release.Version, p.Version) > 0);
-                if (!offered && !state.Disabled && !manualOpen) { card.Hide(); return; }
                 IntPtr foreground = Native.GetForegroundWindow();
                 IntPtr firefox = foreground == card.Handle || Native.GetAncestor(foreground, 2) == card.Handle ? owner : foreground;
                 if (!Native.IsFirefox(firefox) || Native.IsIconic(firefox) || Fullscreen(firefox)) { card.Hide(); return; }
@@ -618,29 +681,30 @@ namespace GhostUI {
                 using (var process = Process.GetProcessById((int)pid)) session = pid + ":" + process.StartTime.ToUniversalTime().Ticks;
                 string version = state.Release == null ? "none" : state.Release.Version;
                 bool dismissed = state.DismissedSession == session && state.DismissedVersion == version;
-                bool compact = !manualOpen && (!offered || dismissed);
-                if (compact && !state.Disabled) { card.Hide(); return; }
+                // A failed/unknown page probe only suppresses automatic expansion.
+                // The manual entry uses verified Firefox HWND identity on every tab.
+                if (owner != IntPtr.Zero && owner != firefox) manualOpen = false;
+                if (now >= nextProbe && !probing && offered && !dismissed && !manualOpen) Probe(firefox);
+                bool startPage = detectedWindow == firefox && detectedOrigin != null && now - detectedAt <= TimeSpan.FromMilliseconds(800);
+                bool compact = !manualOpen && (!offered || dismissed || !startPage);
                 card.SetCompact(compact);
-                if (now >= nextProbe && !probing) Probe(firefox, compact);
-                if (detectedWindow != firefox || detectedOrigin == null || now - detectedAt > TimeSpan.FromMilliseconds(compact ? 1800 : 800)) { card.Hide(); return; }
                 Rectangle bounds = Native.Bounds(firefox);
                 int margin = Math.Max(16, card.Width / 24);
-                if (bounds.Width < card.Width + 100 || bounds.Height < card.Height + 120) { card.Hide(); return; }
+                if (!card.FitToWindow(bounds)) { card.Hide(); return; }
                 card.Location = new Point(bounds.Right - card.Width - margin, bounds.Bottom - card.Height - margin);
                 if (!card.Visible || owner != firefox) {
                     card.Hide(); owner = firefox;
                     if (consentUntil == DateTime.MinValue) {
-                        var profile = profiles.FirstOrDefault(p => p.Origin == detectedOrigin);
-                        if (profile != null) card.Profiles.SelectedItem = profile;
+                        if (!manualOpen) SelectContextProfile();
                     }
                     card.Show(new WindowOwner(firefox));
                 }
             } catch { card.Hide(); }
         }
-        private void Probe(IntPtr window, bool compact) {
-            probing = true; nextProbe = DateTime.UtcNow.AddMilliseconds(compact ? 1000 : 350);
+        private void Probe(IntPtr window) {
+            probing = true; nextProbe = DateTime.UtcNow.AddMilliseconds(350);
             int page = pageGeneration;
-            string[] origins = profiles.Select(p => p.Origin).Distinct().ToArray();
+            string[] origins = profiles.Select(p => p.Origin).Where(o => o != null).Distinct().ToArray();
             var thread = new Thread(delegate() {
                 string origin = null;
                 try { origin = StartPageProbe.Origin(window, origins); } catch { }
@@ -830,6 +894,37 @@ namespace GhostUI {
             fixture.Write(state); var restored = fixture.Read();
             check(restored.Disabled && restored.DismissedSession == state.DismissedSession && restored.Release.Summary[0] == parsed.Summary[0], "Persist dismissal/summary/settings without install approval");
             check(!File.ReadAllText(UpdateStore.IOPath(Path.Combine(fixture.Root, "updates.json"))).Contains("consent"), "No persisted installation approval");
+            string origin = "moz-extension://11111111-2222-3333-4444-555555555555/";
+            check(UpdateRules.StartPage("about:newtab", new string[0]) == "about:newtab", "Recognize ordinary Firefox new tabs without integrations");
+            check(UpdateRules.StartPage("about:home", new string[0]) == "about:home", "Recognize ordinary Firefox home");
+            foreach (string url in new[] { "about:blank", "about:privatebrowsing", "about:newtab#fake", "https://example.invalid/about:newtab", origin + "settings.html", origin + "index.html?fake=1", origin.Replace("555555555555", "666666666666") })
+                check(UpdateRules.StartPage(url, new[] { origin }) == null, "Never automatically trust an unrelated document: " + url);
+            check(UpdateRules.StartPage(origin + "index.html", new[] { origin }) == origin, "Recognize a registered optional start page");
+            string profile = Path.Combine(fixture.Root, "ordinary-profile");
+            Action<string, string> write = delegate(string path, string body) {
+                UpdateStore.SafeDirectory(Path.GetDirectoryName(path)); File.WriteAllText(UpdateStore.IOPath(path), body);
+            };
+            write(Path.Combine(profile, "prefs.js"), "// synthetic ordinary Firefox profile");
+            string installedPath = Path.Combine(Path.GetDirectoryName(fixture.Root), "handles", "installed.json");
+            write(installedPath, UpdateRules.Json().Serialize(new { profiles = new[] { profile } }));
+            string profileState = Path.Combine(profile, "chrome", "ghost-ui", "state.json");
+            write(profileState, "{\"version\":\"1.2.1\"}");
+            check(fixture.Profiles().Length == 1 && fixture.Profiles()[0].Origin == null, "Legacy ordinary profile remains registered without any stylesheet");
+            write(Path.Combine(profile, "chrome", "ghost-ui", "userContent.css"), "/* unrelated CSS origin: " + origin + " */");
+            check(fixture.Profiles()[0].Origin == null, "Stylesheet text cannot register a start-page origin");
+            write(profileState, UpdateRules.Json().Serialize(new { version = "1.2.1", bonjourrOrigin = origin }));
+            check(fixture.Profiles()[0].Origin == origin, "Explicit optional metadata supplies origin independently of CSS");
+            write(profileState, "{\"version\":\"1.2.1\",\"bonjourrOrigin\":{\"invalid\":true}}");
+            check(fixture.Profiles().Length == 1 && fixture.Profiles()[0].Origin == null, "Malformed optional metadata cannot hide an installed profile");
+            write(profileState, "{\"version\":\"1.2.1\"}");
+            string mapping = UpdateRules.Json().Serialize(new Dictionary<string, string> { { UpdateRules.BonjourrId, "11111111-2222-3333-4444-555555555555" } });
+            string pref = "user_pref(\"extensions.webextensions.uuids\", " + UpdateRules.Json().Serialize(mapping) + ");\r\n";
+            write(Path.Combine(profile, "prefs.js"), pref);
+            check(fixture.Profiles()[0].Origin == origin, "Legacy Bonjourr metadata migrates from the exact UUID preference");
+            write(Path.Combine(profile, "prefs.js"), pref + pref);
+            check(fixture.Profiles().Length == 1 && fixture.Profiles()[0].Origin == null, "Ambiguous legacy preference disables only integration");
+            write(Path.Combine(profile, "prefs.js"), "user_pref(\"extensions.webextensions.uuids\", \"not-json\");\n");
+            check(fixture.Profiles().Length == 1 && fixture.Profiles()[0].Origin == null, "Corrupt legacy optional preference preserves core registration");
             byte[] zip;
             using (var memory = new MemoryStream()) {
                 using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, true)) {
