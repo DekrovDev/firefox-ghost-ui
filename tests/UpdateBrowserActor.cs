@@ -49,8 +49,14 @@ namespace GhostUI {
                 var card = (UpdateCard)Field(controller, "card");
                 int acknowledged = 0;
                 int openRequests = 0;
+                int mouseActivations = 0;
+                string activationControl = null;
                 long mouseDownForeground = 0, clickForeground = 0;
                 bool shortcutClaimed = false;
+                card.UserInteraction += delegate {
+                    mouseActivations++;
+                    activationControl = card.ActiveControl == null ? "none" : card.ActiveControl.GetType().Name + ":" + card.ActiveControl.Visible;
+                };
                 ((Button)Field(card, "launcher")).MouseDown += delegate { mouseDownForeground = Native.GetForegroundWindow().ToInt64(); };
                 card.OpenRequested += delegate { openRequests++; clickForeground = Native.GetForegroundWindow().ToInt64(); };
                 timer.Interval = 200;
@@ -165,6 +171,9 @@ namespace GhostUI {
                         shortcutRegistered = (bool)Field(card, "shortcutRegistered"),
                         openRequests = openRequests, shortcutClaimed = shortcutClaimed,
                         mouseDownForeground = mouseDownForeground, clickForeground = clickForeground,
+                        mouseActivations = mouseActivations, activationControl = activationControl,
+                        launcherEnabled = ((Button)Field(card, "launcher")).Enabled,
+                        launcherActualVisible = ((Button)Field(card, "launcher")).Visible,
                         detectedWindowMatch = detectedWindow == owner && owner != IntPtr.Zero,
                         freshnessMs = detectedAt == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - detectedAt).TotalMilliseconds,
                         browserWidth = browserBounds.Width, browserHeight = browserBounds.Height,

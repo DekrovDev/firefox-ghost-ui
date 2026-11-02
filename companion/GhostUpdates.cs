@@ -489,7 +489,8 @@ namespace GhostUI {
             // A real left press on an automatic card enters manual mode before
             // those focus events can invalidate the page-specific presentation.
             if (message.Msg == 0x0021 && ((message.LParam.ToInt64() >> 16) & 0xffff) == 0x0201 && Visible) {
-                if (!IsCompact && UserInteraction != null) UserInteraction();
+                if (IsCompact) ActiveControl = launcher;
+                if (UserInteraction != null) UserInteraction();
                 // Own the explicit activation instead of forwarding it through
                 // the foreign Firefox owner; do not eat the first mouse press.
                 message.Result = new IntPtr(1); // MA_ACTIVATE
@@ -584,7 +585,7 @@ namespace GhostUI {
             card.DismissRequested += Dismiss;
             card.OpenRequested += OpenManually;
             card.UserInteraction += delegate {
-                if (Native.IsFirefox(owner) && !Native.IsIconic(owner) && !Fullscreen(owner)) manualOpen = true;
+                if (!card.IsCompact && Native.IsFirefox(owner) && !Native.IsIconic(owner) && !Fullscreen(owner)) manualOpen = true;
             };
             card.Cancel.Click += delegate { Cancel(); };
             card.Confirm.Click += delegate { Consent(); };
