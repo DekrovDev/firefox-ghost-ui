@@ -176,40 +176,88 @@ namespace GhostUI {
                 card.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
                 bitmap.Save(Path.Combine(folder, name + ".png"), System.Drawing.Imaging.ImageFormat.Png);
                 if (name == "launcher" || name == "available" || name == "current") {
-                    // Synthetic contrast contexts only. The OS applies this same
-                    // uniform form opacity; no wallpaper pixels are inspected.
-                    const int pad = 24, heading = 32;
-                    using (var contexts = new Bitmap((bitmap.Width + pad) * 3 + pad, bitmap.Height + pad * 2 + heading))
-                    using (var graphics = Graphics.FromImage(contexts))
-                    using (var alpha = new System.Drawing.Imaging.ImageAttributes()) {
-                        graphics.Clear(Color.FromArgb(70, 70, 70));
-                        var matrix = new System.Drawing.Imaging.ColorMatrix(); matrix.Matrix33 = (float)card.Opacity;
-                        alpha.SetColorMatrix(matrix);
-                        string[] labels = { "Light", "Dark", "Pattern" };
-                        for (int index = 0; index < 3; index++) {
-                            var area = new Rectangle(pad + index * (bitmap.Width + pad), pad + heading, bitmap.Width, bitmap.Height);
-                            using (var brush = new SolidBrush(index == 0 ? Color.White : Color.FromArgb(12, 12, 12))) graphics.FillRectangle(brush, area);
-                            if (index == 2) {
-                                var previousClip = graphics.Clip;
-                                graphics.SetClip(area);
-                                for (int y = area.Top; y < area.Bottom; y += 28)
-                                    for (int x = area.Left; x < area.Right; x += 28)
-                                        using (var brush = new SolidBrush(((x - area.Left) / 28 + (y - area.Top) / 28) % 2 == 0 ? Color.FromArgb(242, 209, 123) : Color.FromArgb(93, 32, 72)))
-                                            graphics.FillRectangle(brush, x, y, 28, 28);
-                                graphics.Clip = previousClip; previousClip.Dispose();
-                            }
-                            TextRenderer.DrawText(graphics, labels[index], card.Font, new Point(area.Left, pad), Color.White);
-                            var saved = graphics.Save();
-                            if (card.Region != null) {
-                                using (var clip = card.Region.Clone()) {
-                                    clip.Translate(area.X, area.Y); graphics.SetClip(clip, System.Drawing.Drawing2D.CombineMode.Replace);
+                    // Normal-content QA uses the actual versioned notes and a
+                    // separate real native card. The nine raw images above keep
+                    // the stress data; no Firefox/desktop pixels are captured.
+                    string workspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+                    if (String.IsNullOrEmpty(workspace) || !Path.IsPathRooted(workspace)) throw new InvalidDataException("Missing source workspace for versioned preview notes.");
+                    string version = UpdateStore.ReadSmall(Path.Combine(workspace, "VERSION"), 64).Trim();
+                    if (!UpdateRules.VersionValid(version)) throw new InvalidDataException("Invalid preview version.");
+                    string changelog = UpdateStore.ReadSmall(Path.Combine(workspace, "CHANGELOG.md"), 65536).Replace("\r\n", "\n");
+                    var sections = System.Text.RegularExpressions.Regex.Matches(changelog,
+                        @"(?ms)^## \[" + System.Text.RegularExpressions.Regex.Escape(version) + @"\] - [0-9]{4}-[0-9]{2}-[0-9]{2}\n(.*?)(?=^## |\z)");
+                    if (sections.Count != 1) throw new InvalidDataException("Preview requires exactly one matching versioned changelog section.");
+                    string[] notes = UpdateRules.ReadSummary(sections[0].Groups[1].Value);
+                    if (notes.Length == 0) throw new InvalidDataException("Versioned preview summary is unavailable.");
+                    IntPtr owner = Native.GetWindow(card.Handle, 4), foreground = Native.GetForegroundWindow();
+                    if (!Native.IsFirefox(owner) || Native.IsIconic(owner)) throw new InvalidDataException("Preview requires the source card's visible Firefox owner.");
+                    Rectangle ownerBounds = Native.Bounds(owner);
+                    using (var demo = new UpdateCard()) {
+                        bool current = name == "current";
+                        string installed = current ? version : "1.2.1";
+                        var profile = new UpdateProfile { Path = @"C:\Demo\default-release", Version = installed };
+                        demo.Profiles.Items.Add(profile); demo.Profiles.SelectedIndex = 0;
+                        demo.Profiles.AccessibleDescription = profile.Path;
+                        demo.TitleLabel.Text = current ? "Up to date" : "Update available";
+                        demo.VersionLabel.Text = current ? "Version " + installed + " installed" : installed + " \u2192 " + version;
+                        demo.SummaryLabel.Text = String.Join("\n", Array.ConvertAll(notes, text => "\u2022 " + text));
+                        demo.StatusLabel.Text = current ? "Installation always needs your permission." : "Downloading does not install the update.";
+                        demo.Primary.Text = "Download"; demo.Primary.Enabled = !current;
+                        demo.Check.Enabled = true; demo.Manual.Enabled = true; demo.AutoCheck.Checked = true;
+                        demo.Destination.Text = "Install version " + version + " to:\r\n" + profile.Path;
+                        demo.Present(!current, false, false, false, current);
+                        demo.SetCompact(name == "launcher");
+                        demo.Location = new Point(ownerBounds.Left + 16, ownerBounds.Top + 16);
+                        if (!demo.FitToWindow(ownerBounds)) throw new InvalidDataException("Firefox owner is too small for the versioned preview.");
+                        demo.Location = new Point(ownerBounds.Right - demo.Width - 16, ownerBounds.Bottom - demo.Height - 16);
+                        if (!ownerBounds.Contains(demo.Bounds)) throw new InvalidDataException("Versioned preview escaped its Firefox owner.");
+                        try {
+                            demo.Show(new WindowOwner(owner));
+                            if (Native.GetForegroundWindow() != foreground) throw new InvalidOperationException("Versioned preview stole foreground focus.");
+                            if (!demo.FitToWindow(ownerBounds)) throw new InvalidDataException("Visible versioned preview no longer fits.");
+                            demo.Location = new Point(ownerBounds.Right - demo.Width - 16, ownerBounds.Bottom - demo.Height - 16);
+                            if (!ownerBounds.Contains(demo.Bounds) || demo.Width > 2048 || demo.Height > 2048) throw new InvalidDataException("Invalid visible preview geometry.");
+                            using (var normal = new Bitmap(demo.Width, demo.Height)) {
+                                demo.DrawToBitmap(normal, new Rectangle(Point.Empty, normal.Size));
+                                // Synthetic contrast contexts only. The OS applies
+                                // uniform form opacity; no wallpaper is inspected.
+                                const int pad = 24, heading = 32;
+                                using (var contexts = new Bitmap((normal.Width + pad) * 3 + pad, normal.Height + pad * 2 + heading))
+                                using (var graphics = Graphics.FromImage(contexts))
+                                using (var alpha = new System.Drawing.Imaging.ImageAttributes()) {
+                                    graphics.Clear(Color.FromArgb(70, 70, 70));
+                                    var matrix = new System.Drawing.Imaging.ColorMatrix(); matrix.Matrix33 = (float)demo.Opacity;
+                                    alpha.SetColorMatrix(matrix);
+                                    string[] labels = { "Light", "Dark", "Pattern" };
+                                    for (int index = 0; index < 3; index++) {
+                                        var area = new Rectangle(pad + index * (normal.Width + pad), pad + heading, normal.Width, normal.Height);
+                                        using (var brush = new SolidBrush(index == 0 ? Color.White : Color.FromArgb(12, 12, 12))) graphics.FillRectangle(brush, area);
+                                        if (index == 2) {
+                                            var previousClip = graphics.Clip;
+                                            graphics.SetClip(area);
+                                            for (int y = area.Top; y < area.Bottom; y += 28)
+                                                for (int x = area.Left; x < area.Right; x += 28)
+                                                    using (var brush = new SolidBrush(((x - area.Left) / 28 + (y - area.Top) / 28) % 2 == 0 ? Color.FromArgb(242, 209, 123) : Color.FromArgb(93, 32, 72)))
+                                                        graphics.FillRectangle(brush, x, y, 28, 28);
+                                            graphics.Clip = previousClip; previousClip.Dispose();
+                                        }
+                                        TextRenderer.DrawText(graphics, labels[index], demo.Font, new Point(area.Left, pad), Color.White);
+                                        var saved = graphics.Save();
+                                        if (demo.Region != null) {
+                                            using (var clip = demo.Region.Clone()) {
+                                                clip.Translate(area.X, area.Y); graphics.SetClip(clip, System.Drawing.Drawing2D.CombineMode.Replace);
+                                            }
+                                        }
+                                        graphics.DrawImage(normal, area, 0, 0, normal.Width, normal.Height, GraphicsUnit.Pixel, alpha);
+                                        graphics.Restore(saved);
+                                    }
+                                    contexts.Save(Path.Combine(folder, name + "-contexts.png"), System.Drawing.Imaging.ImageFormat.Png);
                                 }
                             }
-                            graphics.DrawImage(bitmap, area, 0, 0, bitmap.Width, bitmap.Height, GraphicsUnit.Pixel, alpha);
-                            graphics.Restore(saved);
-                        }
-                        contexts.Save(Path.Combine(folder, name + "-contexts.png"), System.Drawing.Imaging.ImageFormat.Png);
+                            if (Native.GetForegroundWindow() != foreground) throw new InvalidOperationException("Versioned preview changed foreground focus while rendering.");
+                        } finally { demo.Hide(); }
                     }
+                    if (Native.GetForegroundWindow() != foreground) throw new InvalidOperationException("Closing the versioned preview changed foreground focus.");
                 }
             }
         }
@@ -255,6 +303,11 @@ namespace GhostUI {
                             case "capture-card": CaptureCard(root, card, command.ContainsKey("name") ? command["name"] as string : null); break;
                             case "scroll-checks": ((ScrollableControl)card.AutoCheck.Parent).ScrollControlIntoView(card.AutoCheck); break;
                             case "click-profile": Click(card.Profiles, card); break;
+                            case "open-profile-keyboard":
+                                if (Native.GetForegroundWindow() != card.Handle || !card.Profiles.Enabled) throw new InvalidDataException("Profile keyboard test requires the enabled own foreground card.");
+                                if (!card.Profiles.Focus()) throw new InvalidDataException("Native profile picker did not accept focus.");
+                                Send(new[] { Key(0x73, false), Key(0x73, true) });
+                                break;
                             case "choose-second-keyboard":
                                 if (!card.Profiles.Focused || card.Profiles.Items.Count < 2) throw new InvalidDataException("Native profile picker is not focused or has no second destination.");
                                 Send(new[] { Key(0x24, false), Key(0x24, true), Key(0x28, false), Key(0x28, true), Key(0x0d, false), Key(0x0d, true) });
@@ -356,6 +409,8 @@ namespace GhostUI {
                         manual = card.Manual.Text, manualEnabled = card.Manual.Enabled,
                         ready = (bool)Field(controller, "ready"), confirming = card.Confirm.Visible,
                         primaryEnabled = card.Primary.Enabled, selectedProfile = card.Profiles.SelectedIndex,
+                        profileDroppedDown = card.Profiles.DroppedDown, profileEnabled = card.Profiles.Enabled,
+                        profileRole = card.Profiles.AccessibilityObject.Role.ToString(), profileAccessibleName = card.Profiles.AccessibleName,
                         scrollsVertically = ((Panel)Field(card, "body")).VerticalScroll.Visible,
                         destination = card.Destination.Text,
                         launching = (bool)Field(controller, "launching"), status = card.StatusLabel.Text,
@@ -397,7 +452,16 @@ namespace GhostUI {
                     });
                     string temp = Path.Combine(root, "status.tmp"), destination = Path.Combine(root, "status.json");
                     File.WriteAllText(temp, result);
-                    if (File.Exists(destination)) File.Replace(temp, destination, null); else File.Move(temp, destination);
+                    if (File.Exists(destination)) {
+                        try { File.Replace(temp, destination, null); }
+                        catch (IOException error) {
+                            int code = error.HResult & 0xffff;
+                            if (code != 32 && code != 33) throw;
+                            // Python can briefly hold the last status without
+                            // FileShare.Delete. Publish the current ack/state on
+                            // the next timer tick; never sleep or replay input.
+                        }
+                    } else File.Move(temp, destination);
                 };
                 timer.Start(); Application.Run(main); timer.Stop();
             }

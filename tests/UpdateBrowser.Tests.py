@@ -217,7 +217,7 @@ def main():
         capture_card('ready')
         command('install')
         state = wait(lambda s: s['confirming'], 'Install did not ask for confirmation')
-        assert not state['approved'] and state['cancelVisible'] and state['destinationVisible'] and not state['primaryVisible'], state
+        assert not state['approved'] and state['cancelVisible'] and state['destinationVisible'] and not state['primaryVisible'] and not state['profileEnabled'], state
         check_summary_layout('Confirmation clipped the long release summary')
         capture_card('confirm')
         command('approve')
@@ -348,7 +348,13 @@ def main():
         native_shortcut()
         native_click('click-profile')
         command('choose-second-keyboard')
-        wait(lambda s: s['primaryEnabled'], 'Explicit profile selection did not enable installation')
+        state = wait(lambda s: s['primaryEnabled'] and s['selectedProfile'] == 1, 'Explicit profile selection did not enable installation')
+        assert state['profileRole'] == 'ComboBox' and state['profileAccessibleName'] == 'Profile to update', state
+        command('open-profile-keyboard')
+        wait(lambda s: s['profileDroppedDown'], 'F4 did not open the native profile dropdown')
+        command('escape')
+        state = wait(lambda s: s['visible'] and not s['profileDroppedDown'], 'Escape closed settings instead of just the profile dropdown')
+        assert state['selectedProfile'] == 1, state
         native_shortcut()
         assert wait(lambda s: s['visible'], 'Repeated shortcut closed settings')['selectedProfile'] == 1
         command('install')

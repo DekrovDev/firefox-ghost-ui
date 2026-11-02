@@ -402,6 +402,7 @@ namespace GhostUI {
         internal static readonly Color Text = Color.FromArgb(243, 243, 243);
         internal static readonly Color Muted = Color.FromArgb(190, 190, 190);
         internal static readonly Color Edge = Color.FromArgb(82, 82, 82);
+        internal static readonly Color ControlEdge = Color.FromArgb(112, 112, 112);
         internal static System.Drawing.Drawing2D.GraphicsPath Rounded(Rectangle bounds, int radius) {
             var path = new System.Drawing.Drawing2D.GraphicsPath();
             int diameter = Math.Max(1, Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height)));
@@ -445,14 +446,15 @@ namespace GhostUI {
             Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
             using (var path = UpdateVisuals.Rounded(bounds, (int)Math.Round((TextOnly ? 5 : 9) * DeviceDpi / 96f))) {
                 if (!TextOnly || hovered || highContrast) using (var brush = new SolidBrush(fill)) e.Graphics.FillPath(brush, path);
-                if (!TextOnly && !PrimaryStyle) using (var pen = new Pen(highContrast ? SystemColors.WindowText : UpdateVisuals.Edge)) e.Graphics.DrawPath(pen, path);
+                if (!TextOnly && !PrimaryStyle) using (var pen = new Pen(highContrast ? SystemColors.WindowText : UpdateVisuals.ControlEdge)) e.Graphics.DrawPath(pen, path);
             }
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter |
                 (WrapText ? TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl : TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
             int symbolWidth = String.IsNullOrEmpty(Symbol) ? 0 : (int)Math.Round(20 * DeviceDpi / 96f);
             int gap = symbolWidth == 0 || String.IsNullOrEmpty(Text) ? 0 : (int)Math.Round(8 * DeviceDpi / 96f);
+            var measureFlags = TextFormatFlags.NoPrefix | (WrapText ? TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl : TextFormatFlags.SingleLine);
             Size textSize = String.IsNullOrEmpty(Text) ? Size.Empty : TextRenderer.MeasureText(e.Graphics, Text, Font,
-                WrapText ? new Size(Math.Max(1, Width - 12), Int32.MaxValue) : Size.Empty, flags);
+                new Size(WrapText ? Math.Max(1, Width - 12) : Int32.MaxValue, Int32.MaxValue), measureFlags);
             int textWidth = textSize.Width;
             if (textWidth > 0 && (WrapText || textWidth + symbolWidth + gap + 12 > Width)) { symbolWidth = 0; gap = 0; }
             int start = Math.Max(4, (Width - textWidth - symbolWidth - gap) / 2);
@@ -483,7 +485,7 @@ namespace GhostUI {
             bool contrast = SystemInformation.HighContrast;
             Color ink = Enabled ? ForeColor : contrast ? SystemColors.GrayText : UpdateVisuals.Muted;
             using (var outline = UpdateVisuals.Rounded(new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), (int)Math.Round(7 * DeviceDpi / 96f)))
-            using (var pen = new Pen(contrast || Focused ? ForeColor : UpdateVisuals.Edge)) e.Graphics.DrawPath(pen, outline);
+            using (var pen = new Pen(contrast || Focused ? ForeColor : UpdateVisuals.ControlEdge)) e.Graphics.DrawPath(pen, outline);
             int arrow = (int)Math.Round(28 * DeviceDpi / 96f), pad = (int)Math.Round(10 * DeviceDpi / 96f);
             string text = SelectedIndex < 0 ? "Choose a profile" : GetItemText(SelectedItem);
             TextRenderer.DrawText(e.Graphics, text, Font, new Rectangle(pad, 0, Math.Max(1, Width - arrow - pad), Height), ink,
