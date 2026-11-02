@@ -679,9 +679,20 @@ def run(f, folder):
     f.click("#PanelUI-menu-button")
     f.wait("return document.getElementById('appMenu-popup').state==='open';")
     f.click("#appMenu-find-button2")
-    check(f.wait("return gBrowser.selectedTab._findBar&&!gBrowser.selectedTab._findBar.hidden;"),
-          "Find in page did not open")
-    f.js("gBrowser.selectedTab._findBar.close();return true;")
+    # Inspect the existing rendered control, not a private tab cache field.
+    # Never create a findbar while checking whether the menu opened one.
+    try:
+        check(f.wait("return [...document.querySelectorAll('findbar')].some(b=>"
+                     "!b.hidden&&b.browser===gBrowser.selectedBrowser&&b.getBoundingClientRect().height>0);"),
+              "Find in page did not open")
+    except AssertionError:
+        print('Find diagnostics: ' + json.dumps(f.js("return {"
+              "popup:document.getElementById('appMenu-popup').state,"
+              "active:document.activeElement?.id,privateCached:!!gBrowser.selectedTab._findBar,"
+              "bars:[...document.querySelectorAll('findbar')].map(b=>({hidden:b.hidden,"
+              "selected:b.browser===gBrowser.selectedBrowser,height:b.getBoundingClientRect().height}))};")), flush=True)
+        raise
+    f.js("for(const b of document.querySelectorAll('findbar'))if(b.browser===gBrowser.selectedBrowser)b.close();return true;")
 
     for width in [600, 900, 1440]:
         f.dismiss()
