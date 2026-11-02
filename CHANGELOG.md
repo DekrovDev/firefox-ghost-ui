@@ -15,6 +15,9 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Discover installed profiles independently of optional stylesheets, including older installations.
 - Preserve Firefox homepage settings, cached downloads, backups and explicit installation consent.
 - Wait for a starting companion's stop signal before uninstalling, without force-closing it.
+- Isolate malformed or inaccessible optional/profile metadata from healthy installations.
+- Preserve Later reminders independently across Firefox processes and explicit profile choices on F8.
+- Release the update shortcut outside eligible Firefox windows and require a new choice on ambiguity.
 
 ## [1.2.1] - 2026-10-31
 

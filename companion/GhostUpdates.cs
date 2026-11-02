@@ -31,6 +31,7 @@ namespace GhostUI {
         public string RetryUtc;
         public string DismissedSession;
         public string DismissedVersion;
+        public Dictionary<string, string> DismissedSessions;
         public string Result;
         public bool Disabled;
     }
@@ -47,6 +48,29 @@ namespace GhostUI {
         internal static string StartPage(string url, string[] origins) {
             if (url == "about:newtab" || url == "about:home") return url;
             return origins.FirstOrDefault(o => ValidOrigin(o) != null && (url == o || url == o + "index.html" || url == o + "index.html#"));
+        }
+        internal static bool IsDismissed(UpdateState state, string session, string version) {
+            string dismissed;
+            return state.DismissedSession == session && state.DismissedVersion == version ||
+                state.DismissedSessions != null && session != null && state.DismissedSessions.TryGetValue(session, out dismissed) && dismissed == version;
+        }
+        internal static void RememberDismissal(UpdateState state, string session, string version, Func<string, bool> alive = null) {
+            if (String.IsNullOrEmpty(session)) return;
+            var sessions = new Dictionary<string, string>();
+            if (state.DismissedSessions != null)
+                foreach (var pair in state.DismissedSessions.Take(64))
+                    if (Regex.IsMatch(pair.Key, @"\A[0-9]{1,10}:[0-9]{1,19}\z") && (pair.Value == "none" || VersionValid(pair.Value))) sessions[pair.Key] = pair.Value;
+            // Import the legacy record before replacing it, preserving an older
+            // companion's most recent dismissal during additive-state migration.
+            if (state.DismissedSession != null && Regex.IsMatch(state.DismissedSession, @"\A[0-9]{1,10}:[0-9]{1,19}\z") &&
+                (state.DismissedVersion == "none" || VersionValid(state.DismissedVersion)) && !sessions.ContainsKey(state.DismissedSession))
+                sessions[state.DismissedSession] = state.DismissedVersion;
+            sessions.Remove(session);
+            if (alive != null)
+                foreach (string ended in sessions.Keys.Where(key => !alive(key)).ToArray()) sessions.Remove(ended);
+            while (sessions.Count >= 64) sessions.Remove(sessions.Keys.First());
+            sessions[session] = version; state.DismissedSessions = sessions;
+            state.DismissedSession = session; state.DismissedVersion = version;
         }
         public const long MaxPackage = 64 * 1024 * 1024;
         internal static JavaScriptSerializer Json() { return new JavaScriptSerializer { MaxJsonLength = 1024 * 1024, RecursionLimit = 24 }; }
@@ -236,7 +260,7 @@ namespace GhostUI {
                             catch (IOException) { } catch (UnauthorizedAccessException) { } catch (ArgumentException) { } catch (InvalidOperationException) { }
                         }
                         result.Add(new UpdateProfile { Path = path, Version = version, Origin = origin });
-                    } catch (IOException) { } catch (ArgumentException) { } catch (InvalidOperationException) { }
+                    } catch (IOException) { } catch (UnauthorizedAccessException) { } catch (ArgumentException) { } catch (InvalidOperationException) { }
                 }
                 return result.GroupBy(p => p.Path, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToArray();
             } catch (IOException) { return new UpdateProfile[0]; } catch (ArgumentException) { return new UpdateProfile[0]; } catch (InvalidOperationException) { return new UpdateProfile[0]; }
@@ -437,7 +461,10 @@ namespace GhostUI {
             return true;
         }
         internal void OpenSettings() { launcher.PerformClick(); }
-        internal void RegisterShortcut() { shortcutRegistered = Native.RegisterHotKey(Handle, 3, 0x4003, 0x77); } // Ctrl+Alt+F8
+        internal void SetShortcutEnabled(bool enabled) {
+            if (enabled && !shortcutRegistered) shortcutRegistered = Native.RegisterHotKey(Handle, 3, 0x4003, 0x77); // Ctrl+Alt+F8
+            else if (!enabled && shortcutRegistered) { Native.UnregisterHotKey(Handle, 3); shortcutRegistered = false; }
+        }
         protected override void WndProc(ref Message message) {
             if (message.Msg == 0x0312 && message.WParam.ToInt32() == 3 && Visible) {
                 IntPtr foreground = Native.GetForegroundWindow();
@@ -521,7 +548,7 @@ namespace GhostUI {
             card.Primary.Click += delegate { if (ready) Confirm(); else Download(); };
             card.Later.Click += delegate { Dismiss(); };
             card.DismissRequested += Dismiss;
-            card.OpenRequested += delegate { manualOpen = true; SelectContextProfile(); card.SetCompact(false); Render(); Tick(); };
+            card.OpenRequested += OpenManually;
             card.Cancel.Click += delegate { Cancel(); };
             card.Confirm.Click += delegate { Consent(); };
             card.Check.Click += delegate { Check(true); };
@@ -534,7 +561,6 @@ namespace GhostUI {
             card.Changes.LinkClicked += delegate { OpenRelease(); };
             card.Profiles.SelectedIndexChanged += delegate { confirming = false; consentUntil = DateTime.MinValue; Render(); };
             timer.Interval = 150; timer.Tick += delegate { Tick(); }; timer.Start();
-            card.RegisterShortcut();
             RefreshProfiles(); VerifyCache();
         }
         private void Post(Action action) {
@@ -556,7 +582,10 @@ namespace GhostUI {
                     refreshPending = false;
                     profileCheckedAt = DateTime.UtcNow;
                     if (String.Join("|", profiles.Select(p => p.Path + p.Version + p.Origin)) == String.Join("|", found.Select(p => p.Path + p.Version + p.Origin))) return;
-                    string selected = Selected == null ? null : Selected.Path;
+                    // A formerly automatic sole-profile choice is no longer
+                    // sufficient when another destination becomes available.
+                    bool ambiguousGrowth = found.Length > profiles.Length && found.Length > 1;
+                    string selected = Selected == null || ambiguousGrowth ? null : Selected.Path;
                     profiles = found; card.Profiles.Items.Clear(); card.Profiles.Items.AddRange(found);
                     card.Profiles.SelectedIndex = Math.Max(-1, Array.FindIndex(found, p => p.Path == selected));
                     if (card.Profiles.SelectedIndex < 0) SelectContextProfile();
@@ -568,6 +597,16 @@ namespace GhostUI {
             bool fresh = detectedWindow == owner && DateTime.UtcNow - detectedAt <= TimeSpan.FromMilliseconds(800);
             var matching = profiles.Where(p => fresh && p.Origin != null && p.Origin == detectedOrigin).ToArray();
             card.Profiles.SelectedItem = matching.Length == 1 ? matching[0] : profiles.Length == 1 ? profiles[0] : null;
+        }
+        private void OpenManually() {
+            IntPtr foreground = Native.GetForegroundWindow();
+            IntPtr firefox = foreground == card.Handle || Native.GetAncestor(foreground, 2) == card.Handle ? owner : foreground;
+            if (!Native.IsFirefox(firefox) || Native.IsIconic(firefox) || Fullscreen(firefox)) return;
+            bool changed = owner != firefox;
+            bool alreadyOpen = card.Visible && !card.IsCompact && !changed;
+            if (changed) { card.Hide(); owner = firefox; detectedOrigin = null; pageGeneration++; }
+            if (!alreadyOpen) SelectContextProfile();
+            manualOpen = true; card.SetCompact(false); Render(); Tick();
         }
         private void VerifyCache() {
             var release = state.Release; int stamp = ++generation; ready = false;
@@ -636,7 +675,7 @@ namespace GhostUI {
         private void Dismiss() {
             // Dismissal also revokes an in-memory installation approval.
             confirming = false; consentUntil = DateTime.MinValue; manualOpen = false;
-            state.DismissedSession = session; state.DismissedVersion = state.Release == null ? "none" : state.Release.Version;
+            UpdateRules.RememberDismissal(state, session, state.Release == null ? "none" : state.Release.Version, SessionAlive);
             Save(); card.Hide();
         }
         private void OpenRelease() {
@@ -673,15 +712,15 @@ namespace GhostUI {
                     if (now >= consentUntil) { consentUntil = DateTime.MinValue; status = "Approval expired. Click Install update to try again."; Render(); }
                     else if (!FirefoxRunning()) { LaunchInstall(); return; }
                 }
-                if (now - profileCheckedAt > TimeSpan.FromSeconds(10) || profiles.Length == 0) { card.Hide(); return; }
+                if (now - profileCheckedAt > TimeSpan.FromSeconds(10) || profiles.Length == 0) { card.Hide(); card.SetShortcutEnabled(false); return; }
                 bool offered = state.Release != null && profiles.Any(p => UpdateRules.Compare(state.Release.Version, p.Version) > 0);
                 IntPtr foreground = Native.GetForegroundWindow();
                 IntPtr firefox = foreground == card.Handle || Native.GetAncestor(foreground, 2) == card.Handle ? owner : foreground;
-                if (!Native.IsFirefox(firefox) || Native.IsIconic(firefox) || Fullscreen(firefox)) { card.Hide(); return; }
+                if (!Native.IsFirefox(firefox) || Native.IsIconic(firefox) || Fullscreen(firefox)) { card.Hide(); card.SetShortcutEnabled(false); return; }
                 uint pid; Native.GetWindowThreadProcessId(firefox, out pid);
                 using (var process = Process.GetProcessById((int)pid)) session = pid + ":" + process.StartTime.ToUniversalTime().Ticks;
                 string version = state.Release == null ? "none" : state.Release.Version;
-                bool dismissed = state.DismissedSession == session && state.DismissedVersion == version;
+                bool dismissed = UpdateRules.IsDismissed(state, session, version);
                 // A failed/unknown page probe only suppresses automatic expansion.
                 // The manual entry uses verified Firefox HWND identity on every tab.
                 if (owner != IntPtr.Zero && owner != firefox) manualOpen = false;
@@ -690,8 +729,8 @@ namespace GhostUI {
                 bool compact = !manualOpen && (!offered || dismissed || !startPage);
                 card.SetCompact(compact);
                 Rectangle bounds = Native.Bounds(firefox);
-                int margin = Math.Max(16, card.Width / 24);
-                if (!card.FitToWindow(bounds)) { card.Hide(); return; }
+                if (!card.FitToWindow(bounds)) { card.Hide(); card.SetShortcutEnabled(false); return; }
+                int margin = Math.Max(16, Math.Min(32, card.Width / 24));
                 card.Location = new Point(bounds.Right - card.Width - margin, bounds.Bottom - card.Height - margin);
                 if (!card.Visible || owner != firefox) {
                     card.Hide(); owner = firefox;
@@ -700,7 +739,8 @@ namespace GhostUI {
                     }
                     card.Show(new WindowOwner(firefox));
                 }
-            } catch { card.Hide(); }
+                card.SetShortcutEnabled(true);
+            } catch { card.Hide(); card.SetShortcutEnabled(false); }
         }
         private void Probe(IntPtr window) {
             probing = true; nextProbe = DateTime.UtcNow.AddMilliseconds(350);
@@ -719,6 +759,14 @@ namespace GhostUI {
         internal static bool FirefoxRunning() {
             Process[] processes = Process.GetProcessesByName("firefox");
             try { return processes.Length != 0; } finally { foreach (var process in processes) process.Dispose(); }
+        }
+        private static bool SessionAlive(string session) {
+            string[] parts = session.Split(':'); int pid; long started;
+            if (parts.Length != 2 || !Int32.TryParse(parts[0], out pid) || !Int64.TryParse(parts[1], out started)) return false;
+            try { using (var process = Process.GetProcessById(pid)) return process.StartTime.ToUniversalTime().Ticks == started; }
+            catch (ArgumentException) { return false; }
+            catch (InvalidOperationException) { return false; }
+            catch (System.ComponentModel.Win32Exception) { return true; } // Preserve a session whose identity cannot be read.
         }
         private void LaunchInstall() {
             if (state.Release == null || state.Release.Version != consentVersion || !profiles.Any(p => p.Path == consentProfile)) { Cancel(); return; }
@@ -895,6 +943,19 @@ namespace GhostUI {
             fixture.Write(state); var restored = fixture.Read();
             check(restored.Disabled && restored.DismissedSession == state.DismissedSession && restored.Release.Summary[0] == parsed.Summary[0], "Persist dismissal/summary/settings without install approval");
             check(!File.ReadAllText(UpdateStore.IOPath(Path.Combine(fixture.Root, "updates.json"))).Contains("consent"), "No persisted installation approval");
+            UpdateRules.RememberDismissal(restored, "222:333", parsed.Version);
+            fixture.Write(restored); restored = fixture.Read();
+            check(UpdateRules.IsDismissed(restored, "123:456", parsed.Version) && UpdateRules.IsDismissed(restored, "222:333", parsed.Version), "Preserve legacy and second-process dismissal across restart");
+            check(!UpdateRules.IsDismissed(restored, "222:333", "9.9.9"), "A different release is not dismissed by an old version");
+            for (int index = 1; index < 100; index++) UpdateRules.RememberDismissal(restored, index + ":999", parsed.Version);
+            check(restored.DismissedSessions.Count <= 64 && UpdateRules.IsDismissed(restored, "99:999", parsed.Version), "Bound retained process-session dismissals");
+            var longRunning = new UpdateState();
+            UpdateRules.RememberDismissal(longRunning, "1:111", parsed.Version);
+            for (int index = 2; index < 100; index++) {
+                string current = index + ":999";
+                UpdateRules.RememberDismissal(longRunning, current, parsed.Version, key => key == "1:111" || key == current);
+            }
+            check(UpdateRules.IsDismissed(longRunning, "1:111", parsed.Version), "Ended-session churn cannot evict a live process reminder");
             string origin = "moz-extension://11111111-2222-3333-4444-555555555555/";
             check(UpdateRules.StartPage("about:newtab", new string[0]) == "about:newtab", "Recognize ordinary Firefox new tabs without integrations");
             check(UpdateRules.StartPage("about:home", new string[0]) == "about:home", "Recognize ordinary Firefox home");
@@ -926,6 +987,24 @@ namespace GhostUI {
             check(fixture.Profiles().Length == 1 && fixture.Profiles()[0].Origin == null, "Ambiguous legacy preference disables only integration");
             write(Path.Combine(profile, "prefs.js"), "user_pref(\"extensions.webextensions.uuids\", \"not-json\");\n");
             check(fixture.Profiles().Length == 1 && fixture.Profiles()[0].Origin == null, "Corrupt legacy optional preference preserves core registration");
+            string inaccessible = Path.Combine(fixture.Root, "inaccessible-profile");
+            write(Path.Combine(inaccessible, "prefs.js"), "// disposable inaccessible-profile fixture");
+            string deniedState = UpdateStore.IOPath(Path.Combine(inaccessible, "chrome", "ghost-ui", "state.json"));
+            write(deniedState, "{\"version\":\"1.2.1\"}");
+            write(installedPath, UpdateRules.Json().Serialize(new { profiles = new[] { profile, inaccessible } }));
+            var originalAccess = File.GetAccessControl(deniedState);
+            try {
+                var deniedAccess = File.GetAccessControl(deniedState);
+                deniedAccess.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+                    System.Security.Principal.WindowsIdentity.GetCurrent().User, System.Security.AccessControl.FileSystemRights.ReadData,
+                    System.Security.AccessControl.AccessControlType.Deny));
+                File.SetAccessControl(deniedState, deniedAccess);
+                bool readDenied = false;
+                try { UpdateStore.ReadSmall(deniedState, 65536); } catch (UnauthorizedAccessException) { readDenied = true; }
+                check(readDenied, "Synthetic profile metadata denial was actually enforced");
+                var available = fixture.Profiles();
+                check(available.Length == 1 && available[0].Path == profile, "An inaccessible profile cannot hide a healthy profile");
+            } finally { File.SetAccessControl(deniedState, originalAccess); }
             byte[] zip;
             using (var memory = new MemoryStream()) {
                 using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, true)) {

@@ -279,15 +279,15 @@ function Install-GhostUI([string]$ProfilePath, [string]$ThemePath) {
         $payload = Join-Path $profile 'chrome\ghost-ui'
         New-GhostDirectory $payload
         Copy-GhostFile (Join-Path $ThemePath 'userChrome.css') (Join-Path $payload 'userChrome.css') $true
-        $uuidPref = Get-GhostPreference (Read-GhostText (Join-Path $profile 'prefs.js')) 'extensions.webextensions.uuids'
         $bonjourrUUID = $null
-        if ($uuidPref.exists) {
-            try {
+        try {
+            $uuidPref = Get-GhostPreference (Read-GhostText (Join-Path $profile 'prefs.js')) 'extensions.webextensions.uuids'
+            if ($uuidPref.exists) {
                 $map = $uuidPref.value | ConvertFrom-Json
                 $prop = $map.PSObject.Properties['{4f391a9e-8717-4ba6-a5b1-488a34931fcb}']
                 if ($prop -and $prop.Value -cmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { $bonjourrUUID = $prop.Value.ToLowerInvariant() }
-            } catch { Write-Warning 'Optional Bonjourr integration metadata is unavailable. Core installation will continue.' }
-        }
+            }
+        } catch { Write-Warning 'Optional Bonjourr integration metadata is unavailable. Core installation will continue.' }
         $content = "/* Bonjourr is optional. Run Install.cmd again after adding it. */`r`n"
         $bonjourrStyled = $bonjourrUUID -and (Test-GhostFile (Join-Path $ThemePath 'bonjourr.css'))
         $bonjourrOrigin = if ($bonjourrUUID) { "moz-extension://$bonjourrUUID/" } else { $null }

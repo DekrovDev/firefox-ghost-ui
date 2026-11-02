@@ -18,7 +18,7 @@ The card shows the new and installed versions, a short English summary, a profil
 - **Later** or the close button hides the automatic card for the current Firefox process session. It reappears when you next start Firefox and open a supported start page. Opening another new tab in the same session does not repeat a dismissed card. You can still open settings manually.
 - **Check daily** controls automatic checks. **Check now** requests a check when the API cooldown permits it.
 
-The compact **Ghost UI updates** button remains available when daily checks are disabled, after **Later**, when the profile is up to date, and before any release has been cached. Click it to use **Check now** or **Check daily**. Manual access works even when the current page cannot be identified; the full card never opens automatically over an unrelated page.
+The compact **Ghost UI updates** button remains available when daily checks are disabled, after **Later**, when the profile is up to date, and before any release has been cached. Click it to use **Check now** or **Check daily**. Manual access works even when the current page cannot be identified; the full card never opens automatically over an unrelated page. The shortcut is reserved only while update controls are eligible inside foreground Firefox. Repeating it on an open card preserves the selected profile and confirmation. If another profile becomes available, an ambiguous automatic selection is cleared. Dismissal history retains up to 64 Firefox process sessions, so dismissing a card in a second profile process does not overwrite the first process's reminder state.
 
 ## Install a downloaded update
 

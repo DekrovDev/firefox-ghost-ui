@@ -48,6 +48,7 @@ def main():
     release = {'Version': '9.9.9', 'Size': 3, 'Digest': digest, 'Summary': ['A short English update summary.']}
     (root / 'updates/updates.json').write_text(json.dumps({'Release': release, 'Disabled': True, 'CheckedUtc': datetime.now(timezone.utc).isoformat()}), encoding='utf-8')
     browser = None
+    secondary = None
     actor = None
     command_id = 0
     last = {}
@@ -67,11 +68,11 @@ def main():
             time.sleep(.2)
         raise AssertionError(f'{message}: {last}')
 
-    def command(action):
+    def command(action, **values):
         nonlocal command_id
         command_id += 1
         temp = root / 'command.tmp'
-        temp.write_text(json.dumps({'id': command_id, 'action': action}), encoding='utf-8')
+        temp.write_text(json.dumps({'id': command_id, 'action': action, **values}), encoding='utf-8')
         temp.replace(root / 'command.json')
         return wait(lambda s: s['ack'] == command_id, f'Command {action} not acknowledged')
 
@@ -196,24 +197,82 @@ def main():
         browser.command('WebDriver:Navigate', {'url': 'about:newtab'})
         time.sleep(2)
         assert not wait(lambda s: s['launcherVisible'], 'Native manual entry vanished after Later')['visible']
+        # Exercise the actual desktop-input path, not PerformClick/WM_HOTKEY.
+        command('click-launcher')
+        wait(lambda s: s['visible'] and s['inside'], 'Actual launcher click did not open contained settings')
+        command('later')
+        wait(lambda s: s['launcherVisible'], 'Manual entry missing before native hotkey')
+        command('focus')
+        wait(lambda s: s['ownerIsForeground'], 'Firefox not foreground before native input')
+        command('shortcut')
+        wait(lambda s: s['visible'] and s['cardIsForeground'], 'Ctrl+Alt+F8 did not open and focus settings')
+        command('escape')
+        wait(lambda s: s['launcherVisible'] and not s['visible'], 'Escape did not dismiss keyboard-opened settings')
+        command('other')
+        wait(lambda s: not s['visible'] and not s['launcherVisible'] and not s['shortcutRegistered'], 'Update surfaces or shortcut remained over another app')
+        command('shortcut')
+        time.sleep(.5)
+        state = wait(lambda s: True, 'No status after background shortcut')
+        assert not state['visible'] and not state['launcherVisible'] and not state['cardIsForeground'], state
+        command('focus')
+        wait(lambda s: s['launcherVisible'], 'Manual entry did not return to Firefox')
+        command('minimize')
+        wait(lambda s: not s['visible'] and not s['launcherVisible'], 'Minimized Firefox retained update controls')
+        command('restore')
+        command('focus')
+        wait(lambda s: s['launcherVisible'], 'Restoring Firefox lost manual access')
+        browser.command('Marionette:SetContext', {'value': 'chrome'})
+        browser.js('BrowserCommands.fullScreen();return true;')
+        browser.wait("return document.documentElement.hasAttribute('inFullscreen');")
+        wait(lambda s: not s['visible'] and not s['launcherVisible'], 'Fullscreen Firefox retained update controls')
+        browser.js('BrowserCommands.fullScreen();return true;')
+        browser.wait("return !document.documentElement.hasAttribute('inFullscreen');")
+        command('focus')
+        wait(lambda s: s['launcherVisible'], 'Fullscreen exit lost manual access')
+        regular_owner = wait(lambda s: s['ownerIsForeground'], 'Main window not foreground')['owner']
+        browser.js('window.__ghostPrivate=OpenBrowserWindow({private:true});return true;')
+        browser.wait('return !!window.__ghostPrivate?.gBrowser?.selectedBrowser;')
+        browser.js('window.__ghostPrivate.focus();return true;')
+        state = wait(lambda s: s['owner'] != regular_owner and s['launcherVisible'] and not s['visible'], 'Private window did not retain only manual access')
+        # Remove fixture reminder state so a wrong private-page auto-match
+        # cannot be masked by an earlier Later in the same browser process.
+        command('clear-dismissals')
+        time.sleep(1.5)
+        state = wait(lambda s: True, 'Private-window probe did not report')
+        assert state['launcherVisible'] and not state['visible'], state
+        command('shortcut')
+        wait(lambda s: s['visible'] and s['cardIsForeground'], 'Private-window manual shortcut unavailable')
+        command('later')
+        browser.js('window.__ghostPrivate.close();delete window.__ghostPrivate;return true;')
+        command('focus')
+        wait(lambda s: s['owner'] == regular_owner and s['launcherVisible'], 'Main window did not regain update entry')
+        print('PASS: actual launcher mouse click, native Ctrl+Alt+F8/Escape, background focus, minimize, fullscreen and private-window access', flush=True)
+        # Keep manual settings open as an automatically selected sole profile
+        # becomes ambiguous. A real second browser also tests per-process Later.
+        command('open-settings')
+        wait(lambda s: s['visible'] and s['selectedProfile'] == 0, 'Sole profile not initially selected')
         # Native URLs cannot select between two registered profiles.
-        second = root / 'second-profile'
+        second = root / 'second-browser/profile'
         (second / 'chrome/ghost-ui').mkdir(parents=True)
-        (second / 'prefs.js').write_text('// synthetic profile', encoding='utf-8')
+        (second / 'prefs.js').write_text('// disposable second profile', encoding='utf-8')
         (second / 'chrome/ghost-ui/state.json').write_text('{"version":"1.2.1"}', encoding='utf-8')
         registration = root / 'handles/installed.json'
         registered = json.loads(registration.read_text(encoding='utf-8'))
         registered['profiles'].append(str(second))
         registration.write_text(json.dumps(registered), encoding='utf-8')
-        wait(lambda s: s['profiles'] == 2, 'A profile without optional CSS was excluded')
-        command('open-settings')
+        wait(lambda s: s['profiles'] == 2 and s['visible'], 'Profile refresh closed manual settings or excluded the new profile')
         state = wait(lambda s: s['visible'], 'Ambiguous-profile settings did not open')
         assert state['selectedProfile'] == -1 and not state['primaryEnabled'], state
         command('select-second')
         wait(lambda s: s['primaryEnabled'], 'Explicit profile selection did not enable installation')
+        command('shortcut')
+        assert wait(lambda s: s['visible'], 'Repeated shortcut closed settings')['selectedProfile'] == 1
         command('install')
         state = wait(lambda s: s['confirming'], 'Selected destination did not require confirmation')
         assert str(second) in state['destination'] and not state['approved'], state
+        command('shortcut')
+        state = wait(lambda s: s['visible'], 'Shortcut lost an open confirmation')
+        assert state['confirming'] and state['selectedProfile'] == 1 and not state['approved'], state
         command('cancel')
         browser.command('Marionette:SetContext', {'value': 'chrome'})
         # Firefox may clamp the requested width to its native minimum. Verify
@@ -222,6 +281,22 @@ def main():
         wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] <= small['width'] and s['scrollsVertically'], 'Small-window manual card escaped Firefox or lost scrolling')
         browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1100, 'height': 820})
         wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] >= 1000, 'Expanded manual card escaped Firefox')
+        command('later')
+        first_session = wait(lambda s: s['launcherVisible'], 'First session dismissal failed')['session']
+        secondary = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', root / 'second-browser', headless=False)
+        secondary.browser_pid = int(secondary.js('return Services.appinfo.processID;'))
+        secondary.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1100, 'height': 820})
+        secondary.command('Marionette:SetContext', {'value': 'content'})
+        secondary.command('WebDriver:Navigate', {'url': 'about:newtab'})
+        command('focus-pid', pid=secondary.browser_pid)
+        wait(lambda s: s['session'] != first_session and s['visible'], 'Second real Firefox process did not offer its card')
+        command('later')
+        wait(lambda s: s['launcherVisible'], 'Second session dismissal failed')
+        command('focus')
+        wait(lambda s: s['session'] == first_session and s['launcherVisible'] and not s['visible'], 'Second dismissal erased the first process reminder state')
+        time.sleep(1)
+        assert not wait(lambda s: True, 'Missing first-session status')['visible']
+        print('PASS: two actual Firefox profile processes keep independent Later reminders; repeated shortcut preserves explicit profile/confirmation', flush=True)
         stop_actor()
         (root / 'updates/updates.json').write_text('{"Disabled":true}', encoding='utf-8')
         start_actor(False)
@@ -235,6 +310,8 @@ def main():
             actor.close()
         if browser is not None:
             browser.close()
+        if secondary is not None:
+            secondary.close()
 
 
 if __name__ == '__main__':

@@ -3,10 +3,29 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace GhostUI {
     internal static class UpdateBrowserActor {
+        [StructLayout(LayoutKind.Sequential)] private struct MouseInput { internal int X, Y; internal uint Data, Flags, Time; internal UIntPtr Extra; }
+        [StructLayout(LayoutKind.Sequential)] private struct KeyInput { internal ushort Key, Scan; internal uint Flags, Time; internal UIntPtr Extra; }
+        [StructLayout(LayoutKind.Explicit)] private struct InputData {
+            [FieldOffset(0)] internal MouseInput Mouse;
+            [FieldOffset(0)] internal KeyInput Keyboard;
+        }
+        [StructLayout(LayoutKind.Sequential)] private struct Input { internal uint Type; internal InputData Data; }
+        [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
+        private static void Send(Input[] inputs) {
+            if (SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input))) != inputs.Length)
+                throw new InvalidOperationException("Native fixture input was not delivered.");
+        }
+        private static Input Key(ushort key, bool up) { return new Input { Type = 1, Data = new InputData { Keyboard = new KeyInput { Key = key, Flags = up ? 2u : 0u } } }; }
+        private static void Shortcut() {
+            try { Send(new[] { Key(0x11, false), Key(0x12, false), Key(0x77, false), Key(0x77, true), Key(0x12, true), Key(0x11, true) }); }
+            finally { Send(new[] { Key(0x77, true), Key(0x12, true), Key(0x11, true) }); }
+        }
         private static object Field(object item, string name) {
             return item.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(item);
         }
@@ -29,6 +48,30 @@ namespace GhostUI {
                         var command = UpdateRules.Json().Deserialize<System.Collections.Generic.Dictionary<string, object>>(UpdateStore.ReadSmall(commandPath, 4096));
                         File.Delete(commandPath); acknowledged = Convert.ToInt32(command["id"]);
                         switch ((string)command["action"]) {
+                            case "shortcut": Shortcut(); break;
+                            case "clear-dismissals":
+                                var updateState = (UpdateState)Field(controller, "state");
+                                updateState.DismissedSession = null; updateState.DismissedVersion = null; updateState.DismissedSessions = null;
+                                break;
+                            case "escape": Send(new[] { Key(0x1b, false), Key(0x1b, true) }); break;
+                            case "click-launcher":
+                                if (!card.Visible || !card.IsCompact) throw new InvalidDataException("Expected the real compact entry.");
+                                var center = new Point(card.Left + card.Width / 2, card.Top + card.Height / 2);
+                                if (Native.GetAncestor(Native.WindowFromPoint(center), 2) != card.Handle) throw new InvalidDataException("Launcher is covered by another window.");
+                                Cursor.Position = center;
+                                Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } }, new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } });
+                                break;
+                            case "focus-pid":
+                                int requested = Convert.ToInt32(command["pid"]);
+                                other.Hide();
+                                Native.EnumWindows(delegate(IntPtr window, IntPtr unused) {
+                                    uint pid; Native.GetWindowThreadProcessId(window, out pid);
+                                    if (pid == requested && Native.IsFirefox(window)) { Native.SetForegroundWindow(window); return false; }
+                                    return true;
+                                }, IntPtr.Zero);
+                                break;
+                            case "minimize": Native.ShowWindow((IntPtr)Field(controller, "owner"), 6); break;
+                            case "restore": Native.ShowWindow((IntPtr)Field(controller, "owner"), 9); break;
                             case "open-settings": card.OpenSettings(); break;
                             case "enable-checks": card.AutoCheck.Checked = true; break;
                             case "select-second": card.Profiles.SelectedIndex = 1; break;
@@ -92,6 +135,9 @@ namespace GhostUI {
                         browserWindowVisible = browserWindow != IntPtr.Zero && Native.IsWindowVisible(browserWindow),
                         foregroundClass = className.ToString(),
                         ownerIsForeground = owner != IntPtr.Zero && foreground == owner,
+                        cardIsForeground = foreground == card.Handle || Native.GetAncestor(foreground, 2) == card.Handle,
+                        owner = owner.ToInt64(), dpi = card.DeviceDpi,
+                        shortcutRegistered = (bool)Field(card, "shortcutRegistered"),
                         detectedWindowMatch = detectedWindow == owner && owner != IntPtr.Zero,
                         freshnessMs = detectedAt == DateTime.MinValue ? -1 : (int)(DateTime.UtcNow - detectedAt).TotalMilliseconds,
                         browserWidth = browserBounds.Width, browserHeight = browserBounds.Height,

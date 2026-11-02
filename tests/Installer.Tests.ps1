@@ -309,6 +309,11 @@ try {
     $optionalResult = Install-GhostUI $optionalBroken $theme
     Assert (-not $optionalResult.BonjourrStyled) 'Corrupt optional UUID metadata does not block ordinary Firefox'
     Uninstall-GhostUI $optionalBroken | Out-Null
+    $outerBroken = New-TestProfile 'optional outer preference malformed'
+    Write-TestFile (Join-Path $outerBroken 'prefs.js') 'user_pref("extensions.webextensions.uuids", undefined);'
+    $outerResult = Install-GhostUI $outerBroken $theme
+    Assert (-not $outerResult.BonjourrStyled) 'Malformed outer optional UUID preference does not block core installation'
+    Uninstall-GhostUI $outerBroken | Out-Null
     $baseTheme = Join-Path $sandbox 'base theme only'
     Write-TestFile (Join-Path $baseTheme 'userChrome.css') (Read-TestFile (Join-Path $theme 'userChrome.css'))
     $baseProfile = New-TestProfile 'no optional adapter asset'
