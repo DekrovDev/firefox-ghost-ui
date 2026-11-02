@@ -456,7 +456,8 @@ namespace GhostUI {
             int textWidth = textSize.Width;
             if (textWidth > 0 && (WrapText || textWidth + symbolWidth + gap + 12 > Width)) { symbolWidth = 0; gap = 0; }
             int start = Math.Max(4, (Width - textWidth - symbolWidth - gap) / 2);
-            if (symbolWidth > 0) TextRenderer.DrawText(e.Graphics, Symbol, symbolFont, new Rectangle(start, 0, symbolWidth, Height), ink, flags | TextFormatFlags.HorizontalCenter);
+            if (symbolWidth > 0) TextRenderer.DrawText(e.Graphics, Symbol, symbolFont, new Rectangle(start, 0, symbolWidth, Height), ink,
+                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
             if (textWidth > 0) {
                 Rectangle textBounds = WrapText
                     ? new Rectangle(6, Math.Max(0, (Height - textSize.Height) / 2), Math.Max(1, Width - 12), Math.Min(Height, textSize.Height))
@@ -464,6 +465,32 @@ namespace GhostUI {
                 TextRenderer.DrawText(e.Graphics, Text, Font, textBounds, ink, WrapText ? flags | TextFormatFlags.HorizontalCenter : flags);
             }
             if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -4, -4), ink, fill);
+        }
+        protected override void Dispose(bool disposing) { if (disposing) symbolFont.Dispose(); base.Dispose(disposing); }
+    }
+    internal sealed class UpdateProfilePicker : ComboBox {
+        private readonly Font symbolFont = new Font("Segoe MDL2 Assets", 9);
+        internal UpdateProfilePicker() {
+            DropDownStyle = ComboBoxStyle.DropDownList; DrawMode = DrawMode.OwnerDrawFixed; FlatStyle = FlatStyle.Flat;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        }
+        protected override void OnSelectedIndexChanged(EventArgs e) { base.OnSelectedIndexChanged(e); Invalidate(); }
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+        protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+        protected override void OnPaint(PaintEventArgs e) {
+            e.Graphics.Clear(BackColor); e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            bool contrast = SystemInformation.HighContrast;
+            Color ink = Enabled ? ForeColor : contrast ? SystemColors.GrayText : UpdateVisuals.Muted;
+            using (var outline = UpdateVisuals.Rounded(new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), (int)Math.Round(7 * DeviceDpi / 96f)))
+            using (var pen = new Pen(contrast || Focused ? ForeColor : UpdateVisuals.Edge)) e.Graphics.DrawPath(pen, outline);
+            int arrow = (int)Math.Round(28 * DeviceDpi / 96f), pad = (int)Math.Round(10 * DeviceDpi / 96f);
+            string text = SelectedIndex < 0 ? "Choose a profile" : GetItemText(SelectedItem);
+            TextRenderer.DrawText(e.Graphics, text, Font, new Rectangle(pad, 0, Math.Max(1, Width - arrow - pad), Height), ink,
+                TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(e.Graphics, "\uE70D", symbolFont, new Rectangle(Width - arrow, 0, arrow, Height), ink,
+                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -4, -4), ink, BackColor);
         }
         protected override void Dispose(bool disposing) { if (disposing) symbolFont.Dispose(); base.Dispose(disposing); }
     }
@@ -522,7 +549,7 @@ namespace GhostUI {
             TitleLabel = LabelAt("Update available", 64, 48, 314, 28); TitleLabel.Font = OwnFont("Segoe UI", 14.5f, FontStyle.Regular);
             VersionLabel = LabelAt("", 64, 79, 314, 22); VersionLabel.ForeColor = MutedColor;
             profileCaption = LabelAt("Profile", 22, 112, 52, 32); profileCaption.TextAlign = ContentAlignment.MiddleLeft;
-            Profiles = new ComboBox { Left = 82, Top = 112, Width = 296, DropDownStyle = ComboBoxStyle.DropDownList,
+            Profiles = new UpdateProfilePicker { Left = 82, Top = 112, Width = 296, DropDownStyle = ComboBoxStyle.DropDownList,
                 FlatStyle = FlatStyle.Flat, DrawMode = DrawMode.OwnerDrawFixed, BackColor = BackColor, ForeColor = ForeColor,
                 AccessibleName = "Profile to update" };
             body.Controls.Add(Profiles);

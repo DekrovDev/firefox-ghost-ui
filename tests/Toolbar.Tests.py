@@ -25,6 +25,31 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
+class FixtureDirectory(tempfile.TemporaryDirectory):
+    """Bounded retry of sharing violations in this one disposable directory."""
+    def __init__(self):
+        super().__init__(prefix='ghost-toolbar-test-')
+        self._owned_path = pathlib.Path(self.name).resolve()
+
+    def cleanup(self):
+        deadline = time.monotonic() + 3
+        warned = False
+        while True:
+            target = pathlib.Path(self.name).resolve()
+            if target != self._owned_path or target.parent != pathlib.Path(tempfile.gettempdir()).resolve():
+                raise RuntimeError('Disposable test cleanup path changed; deletion refused')
+            try:
+                super().cleanup()
+                return
+            except OSError as error:
+                if getattr(error, 'winerror', None) != 32 or time.monotonic() >= deadline:
+                    raise
+                if not warned:
+                    print('Waiting for a Windows sharing lock in the disposable test directory.', flush=True)
+                    warned = True
+                time.sleep(.05)
+
+
 class JobProcess:
     """Create a process atomically inside our Windows kill-on-close job.
 
@@ -779,7 +804,7 @@ if __name__ == "__main__":
     if options.job_self_test:
         check_job_lifetime()
         raise SystemExit(0)
-    with tempfile.TemporaryDirectory(prefix="ghost-toolbar-test-") as directory:
+    with FixtureDirectory() as directory:
         folder = pathlib.Path(directory)
         browser = Firefox(options.firefox, options.css, folder)
         try:

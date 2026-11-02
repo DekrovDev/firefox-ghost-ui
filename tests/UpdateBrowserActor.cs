@@ -105,12 +105,14 @@ namespace GhostUI {
             foreach (Control control in body.Controls) if (control.Visible) controls.Add(control);
             return LayoutIssues(body, controls.ToArray());
         }
-        private static object[] NarrowLayouts() {
-            // This independent hidden card never acquires a Firefox owner and
-            // never calls Show. Inspect expected state controls explicitly:
-            // inherited Control.Visible is false under any hidden Form.
+        private static object[] NarrowLayouts(IntPtr owner) {
+            // Native scrolling requires a shown control. Use only an owned,
+            // nonactivating fixture inside the already verified Firefox window.
             var results = new System.Collections.Generic.List<object>();
             IntPtr foreground = Native.GetForegroundWindow();
+            if (!Native.IsFirefox(owner)) throw new InvalidDataException("Narrow fixture requires its verified Firefox owner.");
+            Rectangle ownerBounds = Native.Bounds(owner);
+            var constraint = new Rectangle(0, 0, 300, Math.Min(700, ownerBounds.Height + 84));
             using (var fixture = new UpdateCard()) {
                 IntPtr fixtureHandle = fixture.Handle;
                 var body = (Panel)Field(fixture, "body"); IntPtr bodyHandle = body.Handle;
@@ -119,6 +121,8 @@ namespace GhostUI {
                 string wide = ""; for (int index = 0; index < 24; index++) wide += "WWW ";
                 fixture.SummaryLabel.Text = "\u2022 " + wide + "ONE!\n\u2022 " + wide + "TWO!\n\u2022 " + wide + "END!";
                 fixture.Destination.Text = "Install to the selected disposable profile.";
+                fixture.Location = new Point(ownerBounds.Left + 8, ownerBounds.Top + 8);
+                fixture.Show(new WindowOwner(owner));
                 string[] states = { "available", "ready", "confirm", "approved", "downloading", "current", "no-release" };
                 foreach (string state in states) {
                     bool action = state == "available" || state == "ready";
@@ -128,7 +132,7 @@ namespace GhostUI {
                     fixture.Primary.Text = state == "ready" ? "Install update" : "Download";
                     fixture.StatusLabel.Text = "Downloading update... 00%";
                     fixture.Present(action, confirm, approved, downloading, current);
-                    if (!fixture.FitToWindow(new Rectangle(0, 0, 300, 700))) throw new InvalidDataException("Minimum supported synthetic bounds were rejected.");
+                    if (!fixture.FitToWindow(constraint)) throw new InvalidDataException("Minimum supported synthetic bounds were rejected.");
                     fixture.PerformLayout(); body.PerformLayout();
                     var expected = new System.Collections.Generic.List<Control>(new Control[] {
                         (Control)Field(fixture, "brand"), (Control)Field(fixture, "close"), (Control)Field(fixture, "statusIcon"),
@@ -147,7 +151,7 @@ namespace GhostUI {
                     for (int repeat = 0; repeat < 5; repeat++) {
                         fixture.StatusLabel.Text = "Downloading update... " + (repeat + 10) + "%";
                         fixture.Present(action, confirm, approved, downloading, current);
-                        fixture.FitToWindow(new Rectangle(0, 0, 300, 700));
+                        fixture.FitToWindow(constraint);
                         fixture.PerformLayout(); body.PerformLayout();
                         if (body.AutoScrollPosition != scroll) issues.Add("Repeated fit/progress update reset scroll position.");
                     }
@@ -247,9 +251,14 @@ namespace GhostUI {
                         var command = UpdateRules.Json().Deserialize<System.Collections.Generic.Dictionary<string, object>>(UpdateStore.ReadSmall(commandPath, 4096));
                         File.Delete(commandPath); acknowledged = Convert.ToInt32(command["id"]);
                         switch ((string)command["action"]) {
-                            case "narrow-layouts": narrowLayouts = NarrowLayouts(); break;
+                            case "narrow-layouts": narrowLayouts = NarrowLayouts((IntPtr)Field(controller, "owner")); break;
                             case "capture-card": CaptureCard(root, card, command.ContainsKey("name") ? command["name"] as string : null); break;
                             case "scroll-checks": ((ScrollableControl)card.AutoCheck.Parent).ScrollControlIntoView(card.AutoCheck); break;
+                            case "click-profile": Click(card.Profiles, card); break;
+                            case "choose-second-keyboard":
+                                if (!card.Profiles.Focused || card.Profiles.Items.Count < 2) throw new InvalidDataException("Native profile picker is not focused or has no second destination.");
+                                Send(new[] { Key(0x24, false), Key(0x24, true), Key(0x28, false), Key(0x28, true), Key(0x0d, false), Key(0x0d, true) });
+                                break;
                             case "shortcut": Shortcut(); break;
                             case "click-auto-check": Click(card.AutoCheck, card); break;
                             case "claim-shortcut":

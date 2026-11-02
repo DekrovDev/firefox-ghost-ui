@@ -176,7 +176,7 @@ def main():
         for item in narrow:
             assert item['controls'] >= 14 and item['width'] > 0 and item['bodyWidth'] > 0, item
             assert item['foregroundPreserved'] and item['scrollY'] < 0 and not item['issues'], item
-        print('PASS: hidden 300x700-bounds layout fixture validates all states, positive control widths, no overlap, wrapped summaries and stable scrolling across progress updates', flush=True)
+        print('PASS: nonactivating owned 300px-width fixture validates all states, positive control widths, no overlap, wrapped summaries and stable scrolling across progress updates', flush=True)
         command('scroll-checks')
         native_click('click-auto-check')
         wait(lambda s: s['autoChecks'] and s['visible'], 'Actual automatic-card checkbox click was lost')
@@ -345,7 +345,9 @@ def main():
         wait(lambda s: s['profiles'] == 2 and s['visible'], 'Profile refresh closed manual settings or excluded the new profile')
         state = wait(lambda s: s['visible'], 'Ambiguous-profile settings did not open')
         assert state['selectedProfile'] == -1 and not state['primaryEnabled'], state
-        command('select-second')
+        native_shortcut()
+        native_click('click-profile')
+        command('choose-second-keyboard')
         wait(lambda s: s['primaryEnabled'], 'Explicit profile selection did not enable installation')
         native_shortcut()
         assert wait(lambda s: s['visible'], 'Repeated shortcut closed settings')['selectedProfile'] == 1
