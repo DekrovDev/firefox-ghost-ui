@@ -3,7 +3,15 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Run this handoff fixture only on a disposable GitHub-hosted Windows runner.' }
-if (Get-Process -Name firefox,GhostHandles,GhostUpdater -ErrorAction SilentlyContinue) { throw 'Handoff fixture requires a clean runner process set.' }
+$blocking = @(Get-Process -Name firefox,GhostHandles,GhostUpdater -ErrorAction SilentlyContinue)
+if ($blocking.Count) {
+    foreach ($process in $blocking) {
+        try { Write-Host ("Blocking process: {0}; PID={1}; exited={2}; started={3:o}; path={4}" -f $process.ProcessName, $process.Id, $process.HasExited, $process.StartTime.ToUniversalTime(), $process.Path) }
+        catch { Write-Host ("Blocking process PID={0}; identity unavailable: {1}" -f $process.Id, $_.Exception.GetType().Name) }
+        finally { $process.Dispose() }
+    }
+    throw 'Handoff fixture requires a clean runner process set.'
+}
 $root = Split-Path $PSScriptRoot -Parent
 $sandbox = Join-Path $root ('test-output\handoff-' + [Guid]::NewGuid().ToString('N'))
 $initial = Join-Path $sandbox 'product-initial'

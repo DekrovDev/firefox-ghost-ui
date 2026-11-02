@@ -448,7 +448,12 @@ namespace GhostUI {
                         browserWidth = browserBounds.Width, browserHeight = browserBounds.Height,
                         zoomed = (owner != IntPtr.Zero && Native.IsZoomed(owner)) || (browserWindow != IntPtr.Zero && Native.IsZoomed(browserWindow)),
                         probing = (bool)Field(controller, "probing"),
+                        refreshPending = (bool)Field(controller, "refreshPending"),
+                        profileFreshnessMs = (DateTime)Field(controller, "profileCheckedAt") == DateTime.MinValue ? -1 : (DateTime.UtcNow - (DateTime)Field(controller, "profileCheckedAt")).TotalMilliseconds,
+                        foregroundBounds = Native.Bounds(foreground).ToString(), ownerValid = Native.IsWindow(owner),
+                        cardDisposed = card.IsDisposed, cardDisposing = card.Disposing,
                         session = Field(controller, "session")
+                        , uiFailure = File.Exists(Path.Combine(root, "ui-error.txt")) ? UpdateStore.ReadSmall(Path.Combine(root, "ui-error.txt"), 16384) : null
                     });
                     string temp = Path.Combine(root, "status.tmp"), destination = Path.Combine(root, "status.json");
                     File.WriteAllText(temp, result);

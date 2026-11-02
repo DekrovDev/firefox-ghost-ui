@@ -13,6 +13,28 @@ $updateSource = [IO.File]::ReadAllText((Join-Path $root 'companion\GhostUpdates.
 $defaultRoot = 'Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FirefoxGhostUI", "updates")'
 if (-not $updateSource.Contains($defaultRoot)) { throw 'The exact update root expression could not be redirected for the fixture.' }
 $updateSource = $updateSource.Replace($defaultRoot, ((Join-Path $fixture 'updates') | ConvertTo-Json -Compress))
+# Keep production's recoverable UI guard, but retain its exact exception/stage
+# in this disposable copy so a hidden card cannot mask the original failure.
+$tickStart = $updateSource.IndexOf('        private void Tick() {', [StringComparison]::Ordinal)
+$tickEnd = $updateSource.IndexOf('        private static bool Fullscreen(', $tickStart, [StringComparison]::Ordinal)
+if ($tickStart -lt 0 -or $tickEnd -le $tickStart) { throw 'Could not locate the exact native UI tick for fixture diagnostics.' }
+$tick = $updateSource.Substring($tickStart, $tickEnd - $tickStart)
+$tick = $tick.Replace('DateTime now = DateTime.UtcNow;', 'DateTime now = DateTime.UtcNow; string fixtureStage = "start";')
+foreach ($marker in @(
+    @('IntPtr foreground = Native.GetForegroundWindow();', 'foreground'),
+    @('uint pid; Native.GetWindowThreadProcessId(firefox, out pid);', 'session'),
+    @('card.SetCompact(compact);', 'compact'),
+    @('if (!card.FitToWindow(bounds))', 'fit'),
+    @('card.Location = new Point(', 'position'),
+    @('if (!card.Visible || owner != firefox)', 'show'),
+    @('card.SetShortcutEnabled(true);', 'shortcut')
+)) { $tick = $tick.Replace($marker[0], ('fixtureStage = "' + $marker[1] + '"; ' + $marker[0])) }
+$guard = '} catch { card.Hide(); card.SetShortcutEnabled(false); }'
+if (-not $tick.Contains($guard)) { throw 'Native UI error guard changed; fixture diagnostics need review.' }
+$errorPath = (Join-Path $fixture 'ui-error.txt') | ConvertTo-Json -Compress
+$diagnosticGuard = '} catch (Exception fixtureError) { try { File.WriteAllText(' + $errorPath + ', "stage=" + fixtureStage + ", disposed=" + card.IsDisposed + ", disposing=" + card.Disposing + ", handleCreated=" + card.IsHandleCreated + ", ownerValid=" + Native.IsWindow(owner) + ", foreground=" + Native.GetForegroundWindow() + "\r\n" + fixtureError); } catch { } card.Hide(); card.SetShortcutEnabled(false); }'
+$tick = $tick.Replace($guard, $diagnosticGuard)
+$updateSource = $updateSource.Substring(0, $tickStart) + $tick + $updateSource.Substring($tickEnd)
 $sourcePath = Join-Path $fixture 'GhostUpdates.cs'
 [IO.File]::WriteAllText($sourcePath, $updateSource, [Text.UTF8Encoding]::new($false))
 $actor = Join-Path $actorFolder 'GhostHandles.exe'
