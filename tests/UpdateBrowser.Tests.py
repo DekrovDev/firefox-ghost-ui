@@ -163,6 +163,7 @@ def main():
         # check. The real helper must reject and the still-running card recover.
         command('handoff-failure')
         wait(lambda s: not s['launching'] and s['visible'] and 'not installed' in s['status'], 'Failed pre-stop helper did not restore a retryable card')
+        command('later')
         command('profile-current')
         wait(lambda s: s['launcherVisible'] and not s['visible'], 'Disabled checks have no settings launcher after updating')
         command('open-settings')
@@ -214,6 +215,11 @@ def main():
         state = wait(lambda s: s['confirming'], 'Selected destination did not require confirmation')
         assert str(second) in state['destination'] and not state['approved'], state
         command('cancel')
+        browser.command('Marionette:SetContext', {'value': 'chrome'})
+        browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 400, 'height': 420})
+        wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] <= 420, 'Small-window manual card escaped Firefox')
+        browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1100, 'height': 820})
+        wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] >= 1000, 'Expanded manual card escaped Firefox')
         stop_actor()
         (root / 'updates/updates.json').write_text('{"Disabled":true}', encoding='utf-8')
         start_actor(False)

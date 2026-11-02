@@ -521,7 +521,7 @@ namespace GhostUI {
             card.Primary.Click += delegate { if (ready) Confirm(); else Download(); };
             card.Later.Click += delegate { Dismiss(); };
             card.DismissRequested += Dismiss;
-            card.OpenRequested += delegate { manualOpen = true; SelectContextProfile(); card.SetCompact(false); Render(); };
+            card.OpenRequested += delegate { manualOpen = true; SelectContextProfile(); card.SetCompact(false); Render(); Tick(); };
             card.Cancel.Click += delegate { Cancel(); };
             card.Confirm.Click += delegate { Consent(); };
             card.Check.Click += delegate { Check(true); };
@@ -565,7 +565,8 @@ namespace GhostUI {
             });
         }
         private void SelectContextProfile() {
-            var matching = profiles.Where(p => p.Origin != null && p.Origin == detectedOrigin).ToArray();
+            bool fresh = detectedWindow == owner && DateTime.UtcNow - detectedAt <= TimeSpan.FromMilliseconds(800);
+            var matching = profiles.Where(p => fresh && p.Origin != null && p.Origin == detectedOrigin).ToArray();
             card.Profiles.SelectedItem = matching.Length == 1 ? matching[0] : profiles.Length == 1 ? profiles[0] : null;
         }
         private void VerifyCache() {
