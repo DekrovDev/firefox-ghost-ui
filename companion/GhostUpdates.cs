@@ -397,12 +397,88 @@ namespace GhostUI {
             return null;
         }
     }
+    internal static class UpdateVisuals {
+        internal static readonly Color Surface = Color.FromArgb(36, 36, 36);
+        internal static readonly Color Text = Color.FromArgb(243, 243, 243);
+        internal static readonly Color Muted = Color.FromArgb(190, 190, 190);
+        internal static readonly Color Edge = Color.FromArgb(82, 82, 82);
+        internal static System.Drawing.Drawing2D.GraphicsPath Rounded(Rectangle bounds, int radius) {
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            int diameter = Math.Max(1, Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height)));
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure(); return path;
+        }
+    }
+    // Keep native button input and accessibility; customize only its appearance.
+    internal sealed class UpdateButton : Button {
+        internal bool PrimaryStyle, TextOnly, WrapText;
+        internal string Symbol;
+        private bool hovered, pressed;
+        private readonly Font symbolFont = new Font("Segoe MDL2 Assets", 11);
+        internal UpdateButton() {
+            FlatStyle = FlatStyle.Flat; FlatAppearance.BorderSize = 0;
+            UseVisualStyleBackColor = false; BackColor = UpdateVisuals.Surface;
+            Cursor = Cursors.Hand; UseMnemonic = false;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        }
+        protected override void OnMouseEnter(EventArgs e) { hovered = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hovered = false; pressed = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
+        protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
+        protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
+        protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+        protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Space) { pressed = true; Invalidate(); } base.OnKeyDown(e); }
+        protected override void OnKeyUp(KeyEventArgs e) { pressed = false; Invalidate(); base.OnKeyUp(e); }
+        protected override void OnPaint(PaintEventArgs e) {
+            e.Graphics.Clear(BackColor);
+            bool highContrast = SystemInformation.HighContrast;
+            Color fill = highContrast ? SystemColors.Control : PrimaryStyle ? Color.FromArgb(230, 230, 230) : UpdateVisuals.Surface;
+            Color ink = highContrast ? SystemColors.ControlText : PrimaryStyle ? Color.FromArgb(30, 30, 30) : UpdateVisuals.Text;
+            if (!Enabled) ink = highContrast ? SystemColors.GrayText : Color.FromArgb(150, 150, 150);
+            if (Enabled && hovered && !highContrast) fill = PrimaryStyle ? Color.White : Color.FromArgb(49, 49, 49);
+            if (Enabled && pressed && !highContrast) fill = PrimaryStyle ? Color.FromArgb(199, 199, 199) : Color.FromArgb(60, 60, 60);
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
+            using (var path = UpdateVisuals.Rounded(bounds, (int)Math.Round((TextOnly ? 5 : 9) * DeviceDpi / 96f))) {
+                if (!TextOnly || hovered || highContrast) using (var brush = new SolidBrush(fill)) e.Graphics.FillPath(brush, path);
+                if (!TextOnly && !PrimaryStyle) using (var pen = new Pen(highContrast ? SystemColors.WindowText : UpdateVisuals.Edge)) e.Graphics.DrawPath(pen, path);
+            }
+            var flags = TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter |
+                (WrapText ? TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl : TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+            int symbolWidth = String.IsNullOrEmpty(Symbol) ? 0 : (int)Math.Round(20 * DeviceDpi / 96f);
+            int gap = symbolWidth == 0 || String.IsNullOrEmpty(Text) ? 0 : (int)Math.Round(8 * DeviceDpi / 96f);
+            Size textSize = String.IsNullOrEmpty(Text) ? Size.Empty : TextRenderer.MeasureText(e.Graphics, Text, Font,
+                WrapText ? new Size(Math.Max(1, Width - 12), Int32.MaxValue) : Size.Empty, flags);
+            int textWidth = textSize.Width;
+            if (textWidth > 0 && (WrapText || textWidth + symbolWidth + gap + 12 > Width)) { symbolWidth = 0; gap = 0; }
+            int start = Math.Max(4, (Width - textWidth - symbolWidth - gap) / 2);
+            if (symbolWidth > 0) TextRenderer.DrawText(e.Graphics, Symbol, symbolFont, new Rectangle(start, 0, symbolWidth, Height), ink, flags | TextFormatFlags.HorizontalCenter);
+            if (textWidth > 0) {
+                Rectangle textBounds = WrapText
+                    ? new Rectangle(6, Math.Max(0, (Height - textSize.Height) / 2), Math.Max(1, Width - 12), Math.Min(Height, textSize.Height))
+                    : new Rectangle(start + symbolWidth + gap, 0, Math.Max(1, Width - start - symbolWidth - gap), Height);
+                TextRenderer.DrawText(e.Graphics, Text, Font, textBounds, ink, WrapText ? flags | TextFormatFlags.HorizontalCenter : flags);
+            }
+            if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -4, -4), ink, fill);
+        }
+        protected override void Dispose(bool disposing) { if (disposing) symbolFont.Dispose(); base.Dispose(disposing); }
+    }
     internal sealed class UpdateCard : Form {
         internal event Action DismissRequested;
         internal event Action OpenRequested;
         internal event Action UserInteraction;
         private readonly Panel body = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         private readonly Button launcher;
+        private readonly Label brand, statusIcon, profileCaption, summaryCaption;
+        private readonly Button close;
+        private readonly System.Collections.Generic.List<Font> ownedFonts = new System.Collections.Generic.List<Font>();
+        private bool showAction = true, showConfirm, showCancel, showDestination;
+        private int contentHeight, dividerY;
+        private string layoutKey;
         internal bool IsCompact { get; private set; }
         internal readonly Label TitleLabel, VersionLabel, SummaryLabel, StatusLabel;
         internal readonly Button Primary, Later, Cancel, Confirm, Check, Manual;
@@ -424,12 +500,14 @@ namespace GhostUI {
         internal UpdateCard() {
             Text = "Ghost UI updates"; AccessibleName = Text; ShowInTaskbar = false;
             FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual;
-            AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(448, 472);
-            BackColor = Color.FromArgb(34, 32, 30); ForeColor = Color.FromArgb(244, 239, 230);
-            Font = new Font("Segoe UI", 10); Opacity = .97;
+            AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(400, 472);
+            BackColor = SystemInformation.HighContrast ? SystemColors.Window : UpdateVisuals.Surface;
+            ForeColor = SystemInformation.HighContrast ? SystemColors.WindowText : UpdateVisuals.Text;
+            Font = OwnFont("Segoe UI", 10, FontStyle.Regular); Opacity = SystemInformation.HighContrast ? 1 : .98;
+            DoubleBuffered = true;
             Controls.Add(body);
-            launcher = new Button { Text = "Ghost UI updates", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, Visible = false, AccessibleName = "Open Ghost UI update settings" };
-            launcher.FlatAppearance.BorderColor = Color.FromArgb(133, 123, 109);
+            launcher = new UpdateButton { Text = "Ghost UI updates", Symbol = "\uE72C", Dock = DockStyle.Fill, TextOnly = true,
+                BackColor = BackColor, Visible = false, AccessibleName = "Open Ghost UI update settings" };
             launcher.MouseDown += delegate(object sender, MouseEventArgs e) {
                 // A real click authorizes activation; automatic display and
                 // programmatic opening must remain nonactivating.
@@ -437,47 +515,188 @@ namespace GhostUI {
             };
             launcher.Click += delegate { if (OpenRequested != null) OpenRequested(); };
             Controls.Add(launcher);
-            var brand = LabelAt("GHOST UI", 22, 16, 330, 20); brand.Font = new Font(Font.FontFamily, 9, FontStyle.Bold);
-            var close = ButtonAt("\u00d7", 400, 9, 28, 28, false); close.AccessibleName = "Remind me next Firefox session";
-            TitleLabel = LabelAt("Update available", 22, 48, 402, 32); TitleLabel.Font = new Font(Font.FontFamily, 17);
-            VersionLabel = LabelAt("", 22, 85, 402, 26);
-            var caption = LabelAt("What's new", 22, 119, 402, 22); caption.Font = new Font(Font.FontFamily, 10, FontStyle.Bold);
-            SummaryLabel = LabelAt("", 22, 146, 402, 117);
-            Profiles = new ComboBox { Left = 22, Top = 268, Width = 402, DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Profile to update" };
+            brand = LabelAt("GHOST UI", 22, 16, 270, 20); brand.Font = OwnFont("Segoe UI", 8.5f, FontStyle.Bold);
+            close = ButtonAt("", 350, 9, 28, 28, false); close.AccessibleName = "Remind me next Firefox session";
+            ((UpdateButton)close).Symbol = "\uE711"; ((UpdateButton)close).TextOnly = true;
+            statusIcon = LabelAt("\uE72C", 22, 49, 28, 30); statusIcon.Font = OwnFont("Segoe MDL2 Assets", 19, FontStyle.Regular);
+            TitleLabel = LabelAt("Update available", 64, 48, 314, 28); TitleLabel.Font = OwnFont("Segoe UI", 14.5f, FontStyle.Regular);
+            VersionLabel = LabelAt("", 64, 79, 314, 22); VersionLabel.ForeColor = MutedColor;
+            profileCaption = LabelAt("Profile", 22, 112, 52, 32); profileCaption.TextAlign = ContentAlignment.MiddleLeft;
+            Profiles = new ComboBox { Left = 82, Top = 112, Width = 296, DropDownStyle = ComboBoxStyle.DropDownList,
+                FlatStyle = FlatStyle.Flat, DrawMode = DrawMode.OwnerDrawFixed, BackColor = BackColor, ForeColor = ForeColor,
+                AccessibleName = "Profile to update" };
             body.Controls.Add(Profiles);
-            StatusLabel = LabelAt("Installation always needs your permission.", 22, 303, 402, 43);
-            Primary = ButtonAt("Download", 22, 353, 222, 38, true);
-            Later = ButtonAt("Later", 256, 353, 168, 38, false);
-            Confirm = ButtonAt("Confirm install", 22, 353, 222, 38, true); Confirm.Visible = false;
-            Cancel = ButtonAt("Cancel", 256, 353, 168, 38, false); Cancel.Visible = false;
-            Manual = ButtonAt("Download manually", 22, 401, 222, 28, false);
-            Changes = LinkAt("All changes", 256, 403, 168);
-            AutoCheck = new CheckBox { Text = "Check daily", Left = 22, Top = 436, Width = 190, Height = 24, Checked = true, AccessibleName = "Check for updates daily" };
+            Profiles.DrawItem += delegate(object sender, DrawItemEventArgs e) {
+                bool selected = (e.State & DrawItemState.Selected) != 0;
+                Color background = selected ? SystemColors.Highlight : BackColor;
+                Color ink = selected ? SystemColors.HighlightText : Profiles.Enabled ? ForeColor : MutedColor;
+                using (var brush = new SolidBrush(background)) e.Graphics.FillRectangle(brush, e.Bounds);
+                string text = e.Index < 0 ? "Choose a profile" : Profiles.GetItemText(Profiles.Items[e.Index]);
+                TextRenderer.DrawText(e.Graphics, text, Profiles.Font, Rectangle.Inflate(e.Bounds, -6, 0), ink,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                e.DrawFocusRectangle();
+            };
+            summaryCaption = LabelAt("What's new", 22, 164, 356, 24); summaryCaption.Font = OwnFont("Segoe UI", 10, FontStyle.Bold);
+            SummaryLabel = LabelAt("", 22, 194, 356, 100);
+            StatusLabel = LabelAt("Installation always needs your permission.", 22, 440, 356, 40); StatusLabel.ForeColor = MutedColor;
+            Primary = ButtonAt("Download", 22, 340, 222, 38, true); ((UpdateButton)Primary).Symbol = "\uE896";
+            Later = ButtonAt("Later", 256, 340, 122, 38, false);
+            Confirm = ButtonAt("Confirm install", 22, 340, 222, 38, true); Confirm.Visible = false;
+            Cancel = ButtonAt("Cancel", 256, 340, 122, 38, false); Cancel.Visible = false;
+            Manual = ButtonAt("Download manually", 22, 390, 160, 24, false); ((UpdateButton)Manual).TextOnly = true;
+            Manual.Font = OwnFont("Segoe UI", 10, FontStyle.Underline);
+            Changes = LinkAt("All changes", 190, 392, 90);
+            AutoCheck = new CheckBox { Text = "Check daily", Left = 22, Top = 420, Width = 190, Height = 32, Checked = true, AccessibleName = "Check for updates daily", UseVisualStyleBackColor = false };
             body.Controls.Add(AutoCheck);
-            Check = ButtonAt("Check now", 256, 432, 168, 28, false);
-            Destination = new TextBox { Left = 22, Top = 472, Width = 402, Height = 80, Multiline = true,
-                ReadOnly = true, ScrollBars = ScrollBars.Vertical, Visible = false, AccessibleName = "Installation destination",
+            Check = ButtonAt("Check now", 266, 420, 112, 32, false);
+            Destination = new TextBox { Left = 22, Top = 300, Width = 356, Height = 88, Multiline = true,
+                ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.FixedSingle, Visible = false, AccessibleName = "Installation destination",
                 BackColor = BackColor, ForeColor = ForeColor };
             body.Controls.Add(Destination);
+            // Tab order follows the visual reading order, including an explicit destination.
+            close.TabIndex = 0; Profiles.TabIndex = 1; Destination.TabIndex = 2;
+            Primary.TabIndex = 3; Confirm.TabIndex = 3; Cancel.TabIndex = 4; Later.TabIndex = 4;
+            Manual.TabIndex = 5; Changes.TabIndex = 6; AutoCheck.TabIndex = 7; Check.TabIndex = 8;
+            body.Paint += delegate(object sender, PaintEventArgs e) {
+                using (var pen = new Pen(SystemInformation.HighContrast ? SystemColors.WindowText : UpdateVisuals.Edge)) {
+                    if (body.ClientSize.Width > 1 && body.ClientSize.Height > 1)
+                        using (var outline = UpdateVisuals.Rounded(new Rectangle(0, 0, body.ClientSize.Width - 1, body.ClientSize.Height - 1), S(12)))
+                            e.Graphics.DrawPath(pen, outline);
+                    int y = dividerY + body.AutoScrollPosition.Y;
+                    e.Graphics.DrawLine(pen, S(22), y, body.ClientSize.Width - S(22), y);
+                }
+            };
             close.Click += delegate { if (DismissRequested != null) DismissRequested(); };
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; if (DismissRequested != null) DismissRequested(); } };
         }
         internal void SetCompact(bool compact) {
             if (IsCompact == compact) return;
             IsCompact = compact;
-            float scale = DeviceDpi / 96f;
-            ClientSize = compact ? new Size((int)(176 * scale), (int)(38 * scale)) : new Size((int)(448 * scale), (int)(472 * scale));
+            if (compact) body.AutoScrollPosition = Point.Empty;
             body.Visible = !compact; launcher.Visible = compact;
+            Opacity = SystemInformation.HighContrast ? 1 : compact ? .90 : .98;
+            ClientSize = compact ? new Size(S(176), S(38)) : new Size(S(400), Math.Max(S(300), contentHeight));
         }
         internal bool FitToWindow(Rectangle bounds) {
-            float scale = DeviceDpi / 96f;
-            Size desired = IsCompact ? new Size((int)(176 * scale), (int)(38 * scale))
-                : new Size((int)(448 * scale), (int)((Destination.Visible ? 562 : 472) * scale));
-            body.AutoScrollMinSize = IsCompact ? Size.Empty : desired;
             if (bounds.Width < 300 || bounds.Height < 280) return false;
-            Size fitted = new Size(Math.Min(desired.Width, bounds.Width - 64), Math.Min(desired.Height, bounds.Height - 100));
+            int width = Math.Min(S(IsCompact ? 176 : 400), bounds.Width - 64);
+            int maxHeight = bounds.Height - 100;
+            if (!IsCompact) {
+                ArrangeContent(width, 0);
+                // Measure again with the width actually available beside a vertical scrollbar.
+                if (contentHeight > maxHeight) ArrangeContent(width, SystemInformation.VerticalScrollBarWidth);
+                body.AutoScrollMinSize = new Size(0, contentHeight);
+            } else body.AutoScrollMinSize = Size.Empty;
+            Size fitted = new Size(width, Math.Min(IsCompact ? S(38) : contentHeight, maxHeight));
             if (ClientSize != fitted) ClientSize = fitted;
             return true;
+        }
+        private int S(int value) { return (int)Math.Round(value * DeviceDpi / 96f); }
+        private Color MutedColor { get { return SystemInformation.HighContrast ? SystemColors.WindowText : UpdateVisuals.Muted; } }
+        private Font OwnFont(string family, float size, FontStyle style) {
+            var font = new Font(family, size, style); ownedFonts.Add(font); return font;
+        }
+        internal void Present(bool action, bool confirmation, bool approved, bool downloading, bool current) {
+            showAction = action; showConfirm = confirmation; showCancel = confirmation || approved || downloading;
+            showDestination = confirmation || approved;
+            Primary.Visible = action; Confirm.Visible = confirmation; Cancel.Visible = showCancel;
+            Later.Visible = !confirmation && !approved && !downloading;
+            Destination.Visible = showDestination;
+            statusIcon.Text = current ? "\uE930" : "\uE72C";
+            statusIcon.ForeColor = current && !SystemInformation.HighContrast ? Color.FromArgb(133, 200, 138) : ForeColor;
+            statusIcon.AccessibleName = current ? "Up to date" : "Update status";
+            ((UpdateButton)Primary).Symbol = Primary.Text == "Download" ? "\uE896" : "\uE73E";
+            // Never use inherited Visible values to infer state while the form is hidden.
+            // FitToWindow performs the measured layout before the next Show.
+            Invalidate();
+        }
+        private int MeasuredHeight(Label label, int width) {
+            using (var graphics = CreateGraphics()) {
+                var flags = TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPrefix;
+                int rendered = TextRenderer.MeasureText(graphics, label.Text, label.Font, new Size(Math.Max(1, width), Int32.MaxValue), flags).Height;
+                return Math.Max(rendered, label.GetPreferredSize(new Size(Math.Max(1, width), 0)).Height) + S(4);
+            }
+        }
+        private void ArrangeContent(int width, int scrollbar) {
+            int usable = width - scrollbar, pad = Math.Min(S(22), Math.Max(8, usable / 12));
+            int inner = Math.Max(1, usable - pad * 2);
+            bool narrow = inner < S(320);
+            foreach (var button in new[] { Primary, Confirm, Cancel, Later, Manual, Check }) ((UpdateButton)button).WrapText = narrow;
+            bool actions = showAction || showConfirm || showCancel;
+            string key = usable + ":" + DeviceDpi + ":" + actions + ":" + showDestination + ":" + showConfirm + ":" + showCancel +
+                ":" + TitleLabel.Text + ":" + VersionLabel.Text + ":" + SummaryLabel.Text + ":" + StatusLabel.Text;
+            if (layoutKey == key) return;
+            layoutKey = key;
+            Point offset = body.AutoScrollPosition;
+            body.SuspendLayout();
+            try {
+                brand.Visible = inner >= S(140);
+                Place(brand, pad, S(14), Math.Max(1, inner - S(40)), S(22), offset);
+                Place(close, usable - pad - S(28), S(9), S(28), S(28), offset);
+                Place(statusIcon, pad, S(48), S(28), S(32), offset);
+                bool stackedHeading = inner < S(220);
+                int titleTop = S(stackedHeading ? 84 : 46);
+                int textX = stackedHeading ? pad : pad + S(42), textWidth = Math.Max(1, inner - (stackedHeading ? 0 : S(42)));
+                int titleHeight = Math.Max(S(27), MeasuredHeight(TitleLabel, textWidth));
+                Place(TitleLabel, textX, titleTop, textWidth, titleHeight, offset);
+                int versionTop = titleTop + titleHeight + S(2);
+                int versionHeight = MeasuredHeight(VersionLabel, textWidth);
+                Place(VersionLabel, textX, versionTop, textWidth, versionHeight, offset);
+                int y = versionTop + versionHeight + S(18);
+                Profiles.ItemHeight = S(22);
+                int profileHeight = Math.Max(S(32), Profiles.PreferredHeight);
+                if (narrow) {
+                    Place(profileCaption, pad, y, inner, S(24), offset); y += S(26);
+                    Place(Profiles, pad, y, inner, profileHeight, offset);
+                } else {
+                    Place(profileCaption, pad, y, S(52), profileHeight, offset);
+                    Place(Profiles, pad + S(60), y, inner - S(60), profileHeight, offset);
+                }
+                y += profileHeight + S(18);
+                int captionHeight = Math.Max(S(24), MeasuredHeight(summaryCaption, inner));
+                Place(summaryCaption, pad, y, inner, captionHeight, offset); y += captionHeight + S(5);
+                int summaryHeight = MeasuredHeight(SummaryLabel, inner);
+                Place(SummaryLabel, pad, y, inner, summaryHeight, offset);
+                y += summaryHeight + S(16); dividerY = y; y += S(14);
+                if (showDestination) {
+                    Place(Destination, pad, y, inner, S(88), offset); y += S(102);
+                }
+                int rightWidth = narrow ? inner : S(106), leftWidth = narrow ? inner : inner - rightWidth - S(12);
+                var later = (UpdateButton)Later; later.TextOnly = !actions;
+                if (actions) {
+                    Place(Primary, pad, y, leftWidth, S(38), offset);
+                    Place(Confirm, pad, y, leftWidth, S(38), offset);
+                    int secondaryX = narrow ? pad : pad + leftWidth + S(12);
+                    int secondaryY = narrow && (showAction || showConfirm) ? y + S(46) : y;
+                    Place(Later, secondaryX, secondaryY, rightWidth, S(38), offset);
+                    Place(Cancel, showAction || showConfirm ? secondaryX : pad, secondaryY,
+                        showAction || showConfirm ? rightWidth : inner, S(38), offset);
+                    y = secondaryY + S(50);
+                }
+                if (narrow) {
+                    Place(Manual, pad, y, inner, S(42), offset); y += S(46);
+                    Place(Changes, pad, y, inner, S(26), offset); y += S(30);
+                    if (!actions) { Place(Later, pad, y, inner, S(30), offset); y += S(34); }
+                    Place(AutoCheck, pad, y, inner, S(36), offset); y += S(42);
+                    Place(Check, pad, y, inner, S(36), offset); y += S(48);
+                } else {
+                    Place(Manual, pad - S(5), y, S(155), S(26), offset);
+                    Place(Changes, pad + S(163), y + S(3), S(84), S(23), offset);
+                    if (!actions) Place(Later, usable - pad - S(62), y, S(62), S(26), offset);
+                    y += S(38);
+                    Place(AutoCheck, pad, y, inner - S(124), S(32), offset);
+                    Place(Check, usable - pad - S(112), y, S(112), S(32), offset);
+                    y += S(46);
+                }
+                int statusHeight = MeasuredHeight(StatusLabel, inner);
+                Place(StatusLabel, pad, y, inner, statusHeight, offset);
+                contentHeight = y + statusHeight + S(20);
+                body.Invalidate();
+            } finally { body.ResumeLayout(false); }
+        }
+        private static void Place(Control control, int x, int y, int width, int height, Point offset) {
+            var bounds = new Rectangle(x + offset.X, y + offset.Y, width, height);
+            if (control.Bounds != bounds) control.Bounds = bounds;
         }
         internal void OpenSettings() { launcher.PerformClick(); }
         internal void SetShortcutEnabled(bool enabled) {
@@ -508,30 +727,31 @@ namespace GhostUI {
         protected override void Dispose(bool disposing) {
             if (disposing && shortcutRegistered) { Native.UnregisterHotKey(Handle, 3); shortcutRegistered = false; }
             base.Dispose(disposing);
+            if (disposing) { foreach (var font in ownedFonts) font.Dispose(); ownedFonts.Clear(); }
         }
         protected override bool ProcessCmdKey(ref Message message, Keys key) {
             if (key == Keys.Escape) { if (DismissRequested != null) DismissRequested(); return true; }
             return base.ProcessCmdKey(ref message, key);
         }
         private Label LabelAt(string text, int x, int y, int width, int height) {
-            var label = new Label { Text = text, Left = x, Top = y, Width = width, Height = height, UseMnemonic = false };
+            var label = new Label { Text = text, Left = x, Top = y, Width = width, Height = height, UseMnemonic = false,
+                AutoEllipsis = false, UseCompatibleTextRendering = false };
             body.Controls.Add(label); return label;
         }
         private Button ButtonAt(string text, int x, int y, int width, int height, bool primary) {
-            var button = new Button { Text = text, Left = x, Top = y, Width = width, Height = height, FlatStyle = FlatStyle.Flat,
-                BackColor = primary ? Color.FromArgb(244, 235, 220) : BackColor, ForeColor = primary ? Color.FromArgb(35, 32, 29) : ForeColor };
-            button.FlatAppearance.BorderColor = Color.FromArgb(133, 123, 109); body.Controls.Add(button); return button;
+            var button = new UpdateButton { Text = text, Left = x, Top = y, Width = width, Height = height,
+                PrimaryStyle = primary, BackColor = BackColor, ForeColor = ForeColor };
+            body.Controls.Add(button); return button;
         }
         private LinkLabel LinkAt(string text, int x, int y, int width) {
-            var link = new LinkLabel { Text = text, Left = x, Top = y, Width = width, Height = 24, LinkColor = ForeColor, ActiveLinkColor = Color.White, VisitedLinkColor = ForeColor };
+            var link = new LinkLabel { Text = text, Left = x, Top = y, Width = width, Height = 24,
+                LinkColor = MutedColor, ActiveLinkColor = ForeColor, VisitedLinkColor = MutedColor, LinkBehavior = LinkBehavior.AlwaysUnderline };
             body.Controls.Add(link); return link;
         }
         protected override void OnResize(EventArgs e) {
             base.OnResize(e);
             if (Width < 1 || Height < 1) return;
-            using (var path = new System.Drawing.Drawing2D.GraphicsPath()) {
-                int r = 28; path.AddArc(0, 0, r, r, 180, 90); path.AddArc(Width - r, 0, r, r, 270, 90);
-                path.AddArc(Width - r, Height - r, r, r, 0, 90); path.AddArc(0, Height - r, r, r, 90, 90); path.CloseFigure();
+            using (var path = UpdateVisuals.Rounded(new Rectangle(0, 0, Width, Height), IsCompact ? Height / 2 : S(12))) {
                 Region old = Region; Region = new Region(path); if (old != null) old.Dispose();
             }
         }
@@ -726,21 +946,21 @@ namespace GhostUI {
         private void Render() {
             var release = state.Release; var selected = Selected;
             bool approved = consentUntil > DateTime.UtcNow;
-            card.TitleLabel.Text = release == null ? "Ghost UI updates" : selected != null && UpdateRules.Compare(release.Version, selected.Version) <= 0 ? "This profile is up to date" : ready ? "Ready to install" : "Update available";
-            card.VersionLabel.Text = release == null ? "Check for Ghost UI updates" : "Version " + release.Version + (selected == null ? "" : " - installed " + selected.Version);
+            bool current = release != null && selected != null && UpdateRules.Compare(release.Version, selected.Version) <= 0;
+            card.TitleLabel.Text = release == null ? "Ghost UI updates" : current ? "Up to date" : ready ? "Ready to install" : "Update available";
+            card.VersionLabel.Text = release == null ? "Check for Ghost UI updates" : current ? "Version " + selected.Version + " installed" :
+                selected == null ? "Version " + release.Version + " available" : selected.Version + " \u2192 " + release.Version;
             card.SummaryLabel.Text = release == null || release.Summary == null || release.Summary.Length == 0 ? "Release notes unavailable. See All changes." : String.Join("\n", release.Summary.Select(s => "\u2022 " + s));
             card.Destination.Visible = confirming || approved;
             card.Destination.Text = selected == null ? "Select the Firefox profile to update." : "Install version " + (release == null ? "" : release.Version) + " to:\r\n" + selected.Path;
             card.Profiles.AccessibleDescription = selected == null ? "Choose an installed Firefox profile explicitly." : selected.Path;
-            card.StatusLabel.Text = release != null && !UpdateRules.Valid(release) ? "Automatic download unavailable. Choose Download manually." : status ?? (ready ? "Downloaded and verified. Installation needs your permission." : "Installation always needs your permission.");
+            card.StatusLabel.Text = release != null && !UpdateRules.Valid(release) ? "Automatic download unavailable. Choose Download manually." : status ??
+                (ready && !current ? "Downloaded and verified. Installation needs your permission." : !current && release != null ? "Downloading does not install the update." : "Installation always needs your permission.");
             card.Primary.Text = ready ? "Install update" : "Download";
             card.Primary.Enabled = !busy && UpdateRules.Valid(release) && selected != null && UpdateRules.Compare(release.Version, selected.Version) > 0;
-            card.Primary.Visible = !confirming && !approved && download == null;
-            card.Later.Visible = !confirming && !approved && download == null;
-            card.Confirm.Visible = confirming;
-            card.Cancel.Visible = confirming || approved || download != null;
             card.Profiles.Enabled = !busy && !confirming && !approved;
             card.Check.Enabled = !busy && !approved && !confirming;
+            card.Present(release != null && !current && !confirming && !approved && download == null, confirming, approved, download != null, current);
         }
         private void Tick() {
             if (disposed || launching) return;
@@ -770,8 +990,9 @@ namespace GhostUI {
                 card.SetCompact(compact);
                 Rectangle bounds = UpdateRules.VisibleBounds(Native.Bounds(firefox), Screen.AllScreens.Select(screen => screen.WorkingArea).ToArray());
                 if (!card.FitToWindow(bounds)) { card.Hide(); card.SetShortcutEnabled(false); return; }
-                int margin = Math.Max(16, Math.Min(32, card.Width / 24));
-                card.Location = new Point(bounds.Right - card.Width - margin, bounds.Bottom - card.Height - margin);
+                int margin = Math.Max(8, Math.Min((int)Math.Round(24 * card.DeviceDpi / 96f), Math.Min(bounds.Width - card.Width, bounds.Height - card.Height) / 2));
+                int rightInset = card.IsCompact ? Math.Min((int)Math.Round(88 * card.DeviceDpi / 96f), bounds.Width - card.Width - margin) : margin;
+                card.Location = new Point(bounds.Right - card.Width - rightInset, bounds.Bottom - card.Height - margin);
                 if (!card.Visible || owner != firefox) {
                     card.Hide(); owner = firefox;
                     if (consentUntil == DateTime.MinValue) {

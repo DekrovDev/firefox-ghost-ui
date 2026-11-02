@@ -45,7 +45,11 @@ def main():
                          '<body style="background:#433d30;color:white;font:32px sans-serif">'
                          '<h1>Start page fixture</h1><p>Trusted temporary test extension.</p></body>')
     digest = hashlib.sha256(b'abc').hexdigest()
-    release = {'Version': '9.9.9', 'Size': 3, 'Digest': digest, 'Summary': ['A short English update summary.']}
+    # Three maximum-length, deliberately wide plaintext bullets exercise actual
+    # wrapping and allocation, rather than passing with a one-line placeholder.
+    summaries = [('WWW ' * 24) + ending for ending in ('ONE!', 'TWO!', 'END!')]
+    assert all(len(summary) == 100 for summary in summaries)
+    release = {'Version': '9.9.9', 'Size': 3, 'Digest': digest, 'Summary': summaries}
     (root / 'updates/updates.json').write_text(json.dumps({'Release': release, 'Disabled': True, 'CheckedUtc': datetime.now(timezone.utc).isoformat()}), encoding='utf-8')
     browser = None
     secondary = None
@@ -140,16 +144,44 @@ def main():
             time.sleep(.2)
         raise AssertionError(f'Native target never became ready; no click was sent: {state}')
 
+    def check_summary_layout(message, expect_bullets=True):
+        state = wait(lambda s: s['visible'] and s['summaryVisible'] and
+                     s['summaryAllocatedHeight'] >= s['summaryRequiredHeight'] and
+                     not s['summaryFixedParentClips'] and not s['summaryOverlaps'] and
+                     not s['visibleLayoutIssues'], message)
+        if expect_bullets:
+            assert state['summaryLineCount'] == 3 and all(summary in state['summary'] for summary in summaries), state
+        assert state['summaryAllocatedHeight'] >= state['summaryRequiredHeight'], state
+        assert not state['summaryFixedParentClips'] and not state['summaryOverlaps'], state
+        assert not state['visibleLayoutIssues'], state
+        return state
+
+    def capture_card(name):
+        # The actor uses DrawToBitmap on its own card, never a desktop/page capture.
+        command('capture-card', name=name)
+        preview = root / 'card-previews' / f'{name}.png'
+        assert preview.is_file() and 0 < preview.stat().st_size <= 4 * 1024 * 1024, preview
+
     try:
         origin = start_browser()
         start_actor()
         state = wait(lambda s: s['visible'], 'Update card did not appear over the real extension page')
         assert state['origin'] == origin and state['inside'], state
         assert state['primary'] == 'Download' and state['manual'] == 'Download manually' and state['manualEnabled'], state
-        assert 'A short English update summary.' in state['summary'], state
+        state = check_summary_layout('Available card omitted the full long release summary')
+        assert state['primaryVisible'] and state['primaryEnabled'], state
+        capture_card('available')
+        narrow = command('narrow-layouts')['narrowLayouts']
+        assert {item['state'] for item in narrow} == {'available', 'ready', 'confirm', 'approved', 'downloading', 'current', 'no-release'}, narrow
+        for item in narrow:
+            assert item['controls'] >= 14 and item['width'] > 0 and item['bodyWidth'] > 0, item
+            assert item['foregroundPreserved'] and item['scrollY'] < 0 and not item['issues'], item
+        print('PASS: hidden 300x700-bounds layout fixture validates all states, positive control widths, no overlap, wrapped summaries and stable scrolling across progress updates', flush=True)
+        command('scroll-checks')
         native_click('click-auto-check')
         wait(lambda s: s['autoChecks'] and s['visible'], 'Actual automatic-card checkbox click was lost')
         time.sleep(.7)  # Two independent toggles, outside the OS double-click interval.
+        command('scroll-checks')
         native_click('click-auto-check')
         wait(lambda s: not s['autoChecks'], 'Actual automatic-card checkbox could not be toggled back')
         command('later')
@@ -158,6 +190,7 @@ def main():
         wait(lambda s: s['visible'], 'Automatic card did not return after fixture reminder reset')
         browser.command('WebDriver:Navigate', {'url': 'about:blank'})
         wait(lambda s: not s['visible'] and s['launcherVisible'], 'Unrelated page did not retain only the manual entry')
+        capture_card('launcher')
         browser.command('WebDriver:Navigate', {'url': origin + 'index.html'})
         wait(lambda s: s['visible'], 'Card did not return to the start page')
         command('other')
@@ -180,12 +213,23 @@ def main():
         start_actor()
         state = wait(lambda s: s['visible'] and s['ready'], 'New Firefox session did not remind about the verified cache')
         assert state['primary'] == 'Install update', state
+        check_summary_layout('Ready card omitted the full long release summary')
+        capture_card('ready')
         command('install')
-        assert wait(lambda s: s['confirming'], 'Install did not ask for confirmation')['approved'] is False
+        state = wait(lambda s: s['confirming'], 'Install did not ask for confirmation')
+        assert not state['approved'] and state['cancelVisible'] and state['destinationVisible'] and not state['primaryVisible'], state
+        check_summary_layout('Confirmation clipped the long release summary')
+        capture_card('confirm')
         command('approve')
-        wait(lambda s: s['approved'], 'Explicit confirmation did not create in-memory approval')
+        state = wait(lambda s: s['approved'], 'Explicit confirmation did not create in-memory approval')
+        assert state['cancelVisible'] and state['destinationVisible'] and not state['primaryVisible'], state
+        check_summary_layout('Approval clipped the long release summary')
+        capture_card('approved')
         command('cancel')
-        wait(lambda s: not s['approved'] and not s['confirming'], 'Cancel did not revoke approval')
+        state = wait(lambda s: not s['approved'] and not s['confirming'], 'Cancel did not revoke approval')
+        assert state['primaryVisible'] and state['primaryEnabled'] and state['primary'] == 'Install update', state
+        check_summary_layout('Cancelled flow lost the long release summary')
+        capture_card('cancelled')
         assert not json.loads((root / 'updates/updates.json').read_text(encoding='utf-8')).get('consent'), 'Approval was persisted'
         command('install')
         command('approve')
@@ -198,8 +242,11 @@ def main():
         command('profile-current')
         wait(lambda s: s['launcherVisible'] and not s['visible'], 'Disabled checks have no settings launcher after updating')
         command('open-settings')
-        state = wait(lambda s: s['visible'] and s['title'] == 'This profile is up to date', 'Settings did not open')
+        state = wait(lambda s: s['visible'] and s['title'] == 'Up to date', 'Settings did not open')
         assert not state['autoChecks'] and state['checkEnabled'], state
+        assert not state['primaryVisible'] and state['manualVisible'] and state['manualEnabled'] and state['dailyVisible'] and state['checkVisible'], state
+        check_summary_layout('Current-version settings clipped the cached release summary')
+        capture_card('current')
         command('enable-checks')
         assert wait(lambda s: s['autoChecks'], 'Daily checks could not be enabled')['autoChecks']
         assert not json.loads((root / 'updates/updates.json').read_text(encoding='utf-8'))['Disabled']
@@ -314,6 +361,8 @@ def main():
         # actual returned geometry and scrolling rather than an impossible width.
         small = browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 400, 'height': 420})
         wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] <= small['width'] and s['scrollsVertically'], 'Small-window manual card escaped Firefox or lost scrolling')
+        check_summary_layout('Small-window card allocated an incomplete long release summary')
+        capture_card('small-window')
         browser.command('WebDriver:SetWindowRect', {'x': 0, 'y': 0, 'width': 1100, 'height': 820})
         wait(lambda s: s['visible'] and s['inside'] and s['browserWidth'] >= 1000, 'Expanded manual card escaped Firefox')
         command('later')
@@ -339,6 +388,9 @@ def main():
         command('open-settings')
         state = wait(lambda s: s['visible'] and s['checkEnabled'], 'First manual check is unreachable without cached metadata')
         assert state['title'] == 'Ghost UI updates' and not state['autoChecks'] and not state['approved'], state
+        assert not state['primaryVisible'] and state['manualVisible'] and state['manualEnabled'] and state['dailyVisible'] and state['checkVisible'], state
+        check_summary_layout('No-release settings clipped the unavailable-notes message', expect_bullets=False)
+        capture_card('no-release')
         print('PASS: extension and native Firefox URL/MSAA, no-Bonjourr/no-CSS registration, native home/newtab automatic cards, manual access on other tabs, daily settings, foreground hiding, session/cache reminders, confirmation/cancellation and handoff recovery', flush=True)
     finally:
         if actor is not None:

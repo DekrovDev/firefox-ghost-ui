@@ -60,6 +60,155 @@ namespace GhostUI {
         private static object Field(object item, string name) {
             return item.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(item);
         }
+        private static int SummaryHeight(Label summary) {
+            int width = Math.Max(1, summary.ClientSize.Width - summary.Padding.Horizontal);
+            using (var graphics = summary.CreateGraphics()) {
+                Size measured = TextRenderer.MeasureText(graphics, summary.Text, summary.Font,
+                    new Size(width, Int32.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPrefix);
+                return Math.Max(measured.Height + summary.Padding.Vertical,
+                    summary.GetPreferredSize(new Size(summary.Width, 0)).Height);
+            }
+        }
+        private static string[] SummaryOverlaps(UpdateCard card) {
+            var overlaps = new System.Collections.Generic.List<string>();
+            Rectangle summary = card.SummaryLabel.RectangleToScreen(card.SummaryLabel.ClientRectangle);
+            foreach (Control control in new Control[] { card.Profiles, card.StatusLabel, card.Primary, card.Later,
+                card.Cancel, card.Confirm, card.Check, card.Manual, card.Changes, card.AutoCheck, card.Destination }) {
+                if (control.Visible && summary.IntersectsWith(control.RectangleToScreen(control.ClientRectangle)))
+                    overlaps.Add(control.AccessibleName ?? control.Text ?? control.GetType().Name);
+            }
+            return overlaps.ToArray();
+        }
+        private static string ControlLabel(Control control) {
+            string label = control.AccessibleName ?? control.Name;
+            if (String.IsNullOrEmpty(label)) label = control.GetType().Name + ":" + control.Text;
+            return label.Length > 70 ? label.Substring(0, 70) : label;
+        }
+        private static string[] LayoutIssues(Panel body, Control[] controls) {
+            var issues = new System.Collections.Generic.List<string>();
+            Point offset = body.AutoScrollPosition;
+            for (int index = 0; index < controls.Length; index++) {
+                Control control = controls[index]; Rectangle bounds = control.Bounds;
+                int logicalLeft = bounds.Left - offset.X;
+                if (bounds.Width <= 0 || bounds.Height <= 0) issues.Add("Empty control: " + ControlLabel(control));
+                if (logicalLeft < 0 || logicalLeft + bounds.Width > body.ClientSize.Width)
+                    issues.Add("Outside body width: " + ControlLabel(control));
+                for (int next = index + 1; next < controls.Length; next++)
+                    if (control.Parent == controls[next].Parent && bounds.IntersectsWith(controls[next].Bounds))
+                        issues.Add("Overlap: " + ControlLabel(control) + " / " + ControlLabel(controls[next]));
+            }
+            return issues.ToArray();
+        }
+        private static string[] VisibleLayoutIssues(UpdateCard card) {
+            var body = (Panel)Field(card, "body");
+            var controls = new System.Collections.Generic.List<Control>();
+            foreach (Control control in body.Controls) if (control.Visible) controls.Add(control);
+            return LayoutIssues(body, controls.ToArray());
+        }
+        private static object[] NarrowLayouts() {
+            // This independent hidden card never acquires a Firefox owner and
+            // never calls Show. Inspect expected state controls explicitly:
+            // inherited Control.Visible is false under any hidden Form.
+            var results = new System.Collections.Generic.List<object>();
+            IntPtr foreground = Native.GetForegroundWindow();
+            using (var fixture = new UpdateCard()) {
+                IntPtr fixtureHandle = fixture.Handle;
+                var body = (Panel)Field(fixture, "body"); IntPtr bodyHandle = body.Handle;
+                fixture.Profiles.Items.Add("Disposable profile"); fixture.Profiles.SelectedIndex = 0;
+                fixture.VersionLabel.Text = "Version 9.9.9 - installed 1.3.0";
+                string wide = ""; for (int index = 0; index < 24; index++) wide += "WWW ";
+                fixture.SummaryLabel.Text = "\u2022 " + wide + "ONE!\n\u2022 " + wide + "TWO!\n\u2022 " + wide + "END!";
+                fixture.Destination.Text = "Install to the selected disposable profile.";
+                string[] states = { "available", "ready", "confirm", "approved", "downloading", "current", "no-release" };
+                foreach (string state in states) {
+                    bool action = state == "available" || state == "ready";
+                    bool confirm = state == "confirm", approved = state == "approved", downloading = state == "downloading";
+                    bool current = state == "current";
+                    fixture.TitleLabel.Text = current ? "Up to date" : "Ghost UI updates";
+                    fixture.Primary.Text = state == "ready" ? "Install update" : "Download";
+                    fixture.StatusLabel.Text = "Downloading update... 00%";
+                    fixture.Present(action, confirm, approved, downloading, current);
+                    if (!fixture.FitToWindow(new Rectangle(0, 0, 300, 700))) throw new InvalidDataException("Minimum supported synthetic bounds were rejected.");
+                    fixture.PerformLayout(); body.PerformLayout();
+                    var expected = new System.Collections.Generic.List<Control>(new Control[] {
+                        (Control)Field(fixture, "brand"), (Control)Field(fixture, "close"), (Control)Field(fixture, "statusIcon"),
+                        (Control)Field(fixture, "profileCaption"), (Control)Field(fixture, "summaryCaption"),
+                        fixture.TitleLabel, fixture.VersionLabel, fixture.Profiles, fixture.SummaryLabel,
+                        fixture.StatusLabel, fixture.Manual, fixture.Changes, fixture.AutoCheck, fixture.Check });
+                    if (action) expected.Add(fixture.Primary);
+                    if (confirm) expected.Add(fixture.Confirm);
+                    if (confirm || approved || downloading) expected.Add(fixture.Cancel); else expected.Add(fixture.Later);
+                    if (confirm || approved) expected.Add(fixture.Destination);
+                    var issues = new System.Collections.Generic.List<string>(LayoutIssues(body, expected.ToArray()));
+                    if (fixture.SummaryLabel.ClientSize.Height < SummaryHeight(fixture.SummaryLabel)) issues.Add("Summary allocation is shorter than rendered text.");
+                    body.AutoScrollPosition = new Point(0, 80);
+                    Point scroll = body.AutoScrollPosition;
+                    if (scroll.Y >= 0) issues.Add("Synthetic long content did not actually scroll.");
+                    for (int repeat = 0; repeat < 5; repeat++) {
+                        fixture.StatusLabel.Text = "Downloading update... " + (repeat + 10) + "%";
+                        fixture.Present(action, confirm, approved, downloading, current);
+                        fixture.FitToWindow(new Rectangle(0, 0, 300, 700));
+                        fixture.PerformLayout(); body.PerformLayout();
+                        if (body.AutoScrollPosition != scroll) issues.Add("Repeated fit/progress update reset scroll position.");
+                    }
+                    issues.AddRange(LayoutIssues(body, expected.ToArray()));
+                    results.Add(new { state = state, width = fixture.ClientSize.Width, bodyWidth = body.ClientSize.Width,
+                        controls = expected.Count, issues = issues.ToArray(), scrollY = body.AutoScrollPosition.Y,
+                        foregroundPreserved = Native.GetForegroundWindow() == foreground });
+                    body.AutoScrollPosition = Point.Empty;
+                }
+            }
+            return results.ToArray();
+        }
+        private static void CaptureCard(string root, UpdateCard card, string name) {
+            // Render only this fixture's own native control tree. Never capture
+            // the desktop, Firefox document or any pixels behind the overlay.
+            string[] names = { "launcher", "available", "ready", "confirm", "approved", "cancelled", "current", "small-window", "no-release" };
+            if (Array.IndexOf(names, name) < 0 || !card.Visible || card.Width < 1 || card.Height < 1 || card.Width > 2048 || card.Height > 2048)
+                throw new InvalidDataException("Invalid own-card capture request.");
+            string folder = Path.Combine(root, "card-previews");
+            Directory.CreateDirectory(folder);
+            using (var bitmap = new Bitmap(card.Width, card.Height)) {
+                card.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+                bitmap.Save(Path.Combine(folder, name + ".png"), System.Drawing.Imaging.ImageFormat.Png);
+                if (name == "launcher" || name == "available" || name == "current") {
+                    // Synthetic contrast contexts only. The OS applies this same
+                    // uniform form opacity; no wallpaper pixels are inspected.
+                    const int pad = 24, heading = 32;
+                    using (var contexts = new Bitmap((bitmap.Width + pad) * 3 + pad, bitmap.Height + pad * 2 + heading))
+                    using (var graphics = Graphics.FromImage(contexts))
+                    using (var alpha = new System.Drawing.Imaging.ImageAttributes()) {
+                        graphics.Clear(Color.FromArgb(70, 70, 70));
+                        var matrix = new System.Drawing.Imaging.ColorMatrix(); matrix.Matrix33 = (float)card.Opacity;
+                        alpha.SetColorMatrix(matrix);
+                        string[] labels = { "Light", "Dark", "Pattern" };
+                        for (int index = 0; index < 3; index++) {
+                            var area = new Rectangle(pad + index * (bitmap.Width + pad), pad + heading, bitmap.Width, bitmap.Height);
+                            using (var brush = new SolidBrush(index == 0 ? Color.White : Color.FromArgb(12, 12, 12))) graphics.FillRectangle(brush, area);
+                            if (index == 2) {
+                                var previousClip = graphics.Clip;
+                                graphics.SetClip(area);
+                                for (int y = area.Top; y < area.Bottom; y += 28)
+                                    for (int x = area.Left; x < area.Right; x += 28)
+                                        using (var brush = new SolidBrush(((x - area.Left) / 28 + (y - area.Top) / 28) % 2 == 0 ? Color.FromArgb(242, 209, 123) : Color.FromArgb(93, 32, 72)))
+                                            graphics.FillRectangle(brush, x, y, 28, 28);
+                                graphics.Clip = previousClip; previousClip.Dispose();
+                            }
+                            TextRenderer.DrawText(graphics, labels[index], card.Font, new Point(area.Left, pad), Color.White);
+                            var saved = graphics.Save();
+                            if (card.Region != null) {
+                                using (var clip = card.Region.Clone()) {
+                                    clip.Translate(area.X, area.Y); graphics.SetClip(clip, System.Drawing.Drawing2D.CombineMode.Replace);
+                                }
+                            }
+                            graphics.DrawImage(bitmap, area, 0, 0, bitmap.Width, bitmap.Height, GraphicsUnit.Pixel, alpha);
+                            graphics.Restore(saved);
+                        }
+                        contexts.Save(Path.Combine(folder, name + "-contexts.png"), System.Drawing.Imaging.ImageFormat.Png);
+                    }
+                }
+            }
+        }
         [STAThread] private static int Main(string[] args) {
             if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" ||
                 Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted" || args.Length != 2) return 2;
@@ -84,6 +233,7 @@ namespace GhostUI {
                 string activationControl = null;
                 long mouseDownForeground = 0, clickForeground = 0;
                 bool shortcutClaimed = false;
+                object[] narrowLayouts = new object[0];
                 card.UserInteraction += delegate {
                     mouseActivations++;
                     activationControl = card.ActiveControl == null ? "none" : card.ActiveControl.GetType().Name + ":" + card.ActiveControl.Visible;
@@ -97,6 +247,9 @@ namespace GhostUI {
                         var command = UpdateRules.Json().Deserialize<System.Collections.Generic.Dictionary<string, object>>(UpdateStore.ReadSmall(commandPath, 4096));
                         File.Delete(commandPath); acknowledged = Convert.ToInt32(command["id"]);
                         switch ((string)command["action"]) {
+                            case "narrow-layouts": narrowLayouts = NarrowLayouts(); break;
+                            case "capture-card": CaptureCard(root, card, command.ContainsKey("name") ? command["name"] as string : null); break;
+                            case "scroll-checks": ((ScrollableControl)card.AutoCheck.Parent).ScrollControlIntoView(card.AutoCheck); break;
                             case "shortcut": Shortcut(); break;
                             case "click-auto-check": Click(card.AutoCheck, card); break;
                             case "claim-shortcut":
@@ -174,10 +327,23 @@ namespace GhostUI {
                     foreach (Form form in Application.OpenForms)
                         forms.Add(form.GetType().Name + ":" + (form.IsHandleCreated ? form.Handle.ToInt64() : 0) + ":" + form.Visible);
                     var launcher = (Button)Field(card, "launcher");
+                    int summaryHeight = SummaryHeight(card.SummaryLabel);
+                    Rectangle summaryBounds = card.SummaryLabel.Bounds;
+                    bool summaryFixedParentClips = card.SummaryLabel.Parent != null && card.SummaryLabel.Parent != card &&
+                        !(card.SummaryLabel.Parent is ScrollableControl && ((ScrollableControl)card.SummaryLabel.Parent).AutoScroll) &&
+                        !card.SummaryLabel.Parent.ClientRectangle.Contains(summaryBounds);
                     string result = UpdateRules.Json().Serialize(new {
                         actor = Process.GetCurrentProcess().Id, ack = acknowledged, visible = card.Visible && !card.IsCompact,
                         launcherVisible = card.Visible && card.IsCompact, autoChecks = card.AutoCheck.Checked, checkEnabled = card.Check.Enabled,
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
+                        summaryVisible = card.SummaryLabel.Visible, summaryRequiredHeight = summaryHeight,
+                        summaryAllocatedHeight = card.SummaryLabel.ClientSize.Height, summaryWidth = card.SummaryLabel.ClientSize.Width,
+                        summaryOverlaps = SummaryOverlaps(card), summaryFixedParentClips = summaryFixedParentClips,
+                        summaryLineCount = card.SummaryLabel.Text.Split('\n').Length,
+                        visibleLayoutIssues = VisibleLayoutIssues(card), narrowLayouts = narrowLayouts,
+                        primaryVisible = card.Primary.Visible, manualVisible = card.Manual.Visible,
+                        dailyVisible = card.AutoCheck.Visible, checkVisible = card.Check.Visible,
+                        cancelVisible = card.Cancel.Visible, destinationVisible = card.Destination.Visible,
                         manual = card.Manual.Text, manualEnabled = card.Manual.Enabled,
                         ready = (bool)Field(controller, "ready"), confirming = card.Confirm.Visible,
                         primaryEnabled = card.Primary.Enabled, selectedProfile = card.Profiles.SelectedIndex,

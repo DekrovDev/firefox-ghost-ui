@@ -2,6 +2,19 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
+## Unreleased
+
+### Summary
+- Open update settings with a compact, neutral launcher that suits any wallpaper.
+- Read complete update summaries in a smaller, clearer card.
+- Keep update checks handy without an inactive Download button when already up to date.
+
+### Details
+- Use rounded native controls, neutral graphite surfaces and Windows system icons.
+- Measure summary and status text before placing profile controls and actions.
+- Preserve scrolling, explicit profile selection and separate download and installation consent.
+- Keep Check now, Check daily and manual release links reachable in every update state.
+
 ## [1.3.0] - 2026-11-02
 
 ### Summary

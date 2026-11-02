@@ -107,8 +107,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload test logs and diagnostics
         # Keep Windows/Linux evidence even when individual steps fail. Only
-        # plain-text transcripts and source metadata are collected; retention
-        # is bounded and no secrets or binaries are included.
+        # plain-text transcripts, source metadata and bounded renders of the
+        # fixture's own update card are collected. No browser/desktop capture.
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -128,6 +128,7 @@ jobs:
             test-output/update-browser.txt
             test-output/process-lifetime.txt
             test-output/helper-fixtures.txt
+            test-output/browser-*/card-previews/*.png
       - name: Upload tested release package
         if: success() && github.ref_type == 'tag'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
