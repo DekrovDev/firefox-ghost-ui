@@ -132,6 +132,14 @@ def main():
         assert state['origin'] == origin and state['inside'], state
         assert state['primary'] == 'Download' and state['manual'] == 'Download manually' and state['manualEnabled'], state
         assert 'A short English update summary.' in state['summary'], state
+        command('click-auto-check')
+        wait(lambda s: s['autoChecks'] and s['visible'], 'Actual automatic-card checkbox click was lost')
+        command('click-auto-check')
+        wait(lambda s: not s['autoChecks'], 'Actual automatic-card checkbox could not be toggled back')
+        command('later')
+        command('clear-dismissals')
+        command('focus')
+        wait(lambda s: s['visible'], 'Automatic card did not return after fixture reminder reset')
         browser.command('WebDriver:Navigate', {'url': 'about:blank'})
         wait(lambda s: not s['visible'] and s['launcherVisible'], 'Unrelated page did not retain only the manual entry')
         browser.command('WebDriver:Navigate', {'url': origin + 'index.html'})
@@ -205,9 +213,10 @@ def main():
         assert not wait(lambda s: s['launcherVisible'], 'Native manual entry vanished after Later')['visible']
         # Exercise the actual desktop-input path, not PerformClick/WM_HOTKEY.
         state = wait(lambda s: s['launcherVisible'] and s['onScreen'], 'Compact entry is outside the visible working area')
+        mouse_opens = state['openRequests']
         print(f"Native entry geometry: card=({state['cardX']},{state['cardY']},{state['cardWidth']},{state['cardHeight']}), workArea={state['screenWidth']}x{state['screenHeight']}", flush=True)
         command('click-launcher')
-        clicked = wait(lambda s: s['visible'] and s['inside'] and s['onScreen'], 'Actual launcher click did not open contained settings')
+        clicked = wait(lambda s: s['openRequests'] > mouse_opens and s['visible'] and s['inside'] and s['onScreen'], 'Actual launcher click did not open contained settings')
         assert clicked['nativeOwner'] == clicked['owner'], 'Native update-card ownership detached from Firefox'
         command('later')
         wait(lambda s: s['launcherVisible'], 'Manual entry missing before native hotkey')

@@ -26,6 +26,13 @@ namespace GhostUI {
             try { Send(new[] { Key(0x11, false), Key(0x12, false), Key(0x77, false), Key(0x77, true), Key(0x12, true), Key(0x11, true) }); }
             finally { Send(new[] { Key(0x77, true), Key(0x12, true), Key(0x11, true) }); }
         }
+        private static void Click(Control control, UpdateCard card) {
+            Point center = control.PointToScreen(new Point(control.Width / 2, control.Height / 2));
+            Cursor.Position = center;
+            if (Cursor.Position != center || Native.GetAncestor(Native.WindowFromPoint(center), 2) != card.Handle)
+                throw new InvalidDataException("Native control click is clipped or covered.");
+            Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } }, new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } });
+        }
         private static object Field(object item, string name) {
             return item.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(item);
         }
@@ -54,6 +61,7 @@ namespace GhostUI {
                         File.Delete(commandPath); acknowledged = Convert.ToInt32(command["id"]);
                         switch ((string)command["action"]) {
                             case "shortcut": Shortcut(); break;
+                            case "click-auto-check": Click(card.AutoCheck, card); break;
                             case "claim-shortcut":
                                 if (Native.GetForegroundWindow() != other.Handle) throw new InvalidDataException("Expected the unrelated fixture window in foreground.");
                                 shortcutClaimed = Native.RegisterHotKey(other.Handle, 88, 0x4003, 0x77);

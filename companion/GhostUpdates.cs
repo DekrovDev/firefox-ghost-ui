@@ -400,6 +400,7 @@ namespace GhostUI {
     internal sealed class UpdateCard : Form {
         internal event Action DismissRequested;
         internal event Action OpenRequested;
+        internal event Action UserInteraction;
         private readonly Panel body = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         private readonly Button launcher;
         internal bool IsCompact { get; private set; }
@@ -484,6 +485,16 @@ namespace GhostUI {
             else if (!enabled && shortcutRegistered) { Native.UnregisterHotKey(Handle, 3); shortcutRegistered = false; }
         }
         protected override void WndProc(ref Message message) {
+            // WM_MOUSEACTIVATE precedes Firefox losing accessibility focus.
+            // A real left press on an automatic card enters manual mode before
+            // those focus events can invalidate the page-specific presentation.
+            if (message.Msg == 0x0021 && ((message.LParam.ToInt64() >> 16) & 0xffff) == 0x0201 && Visible) {
+                if (!IsCompact && UserInteraction != null) UserInteraction();
+                // Own the explicit activation instead of forwarding it through
+                // the foreign Firefox owner; do not eat the first mouse press.
+                message.Result = new IntPtr(1); // MA_ACTIVATE
+                return;
+            }
             if (message.Msg == 0x0312 && message.WParam.ToInt32() == 3 && Visible) {
                 IntPtr foreground = Native.GetForegroundWindow();
                 if (Native.IsFirefox(foreground) || foreground == Handle || Native.GetAncestor(foreground, 2) == Handle) {
@@ -556,7 +567,12 @@ namespace GhostUI {
                 if (top != IntPtr.Zero && (top == owner || top == detectedWindow) && ((objectId == 0 && childId == 0) || (kind >= 0x8006 && kind <= 0x8009)) &&
                     Interlocked.Exchange(ref invalidationQueued, 1) == 0) Post(delegate {
                     Interlocked.Exchange(ref invalidationQueued, 0);
-                    pageGeneration++; detectedOrigin = null; if (!manualOpen) card.Hide(); nextProbe = DateTime.MinValue;
+                    pageGeneration++; detectedOrigin = null;
+                    // Only automatic full cards depend on page identity.
+                    // Hiding the compact entry on Firefox focus/selection events
+                    // can remove it between mouse activation and MouseDown.
+                    if (!manualOpen && !card.IsCompact) card.Hide();
+                    nextProbe = DateTime.MinValue;
                 });
             };
             titleHook = SetWinEventHook(0x800c, 0x800c, IntPtr.Zero, windowEvent, 0, 0, 2); // Window title changes, skip own process.
@@ -567,6 +583,9 @@ namespace GhostUI {
             card.Later.Click += delegate { Dismiss(); };
             card.DismissRequested += Dismiss;
             card.OpenRequested += OpenManually;
+            card.UserInteraction += delegate {
+                if (Native.IsFirefox(owner) && !Native.IsIconic(owner) && !Fullscreen(owner)) manualOpen = true;
+            };
             card.Cancel.Click += delegate { Cancel(); };
             card.Confirm.Click += delegate { Consent(); };
             card.Check.Click += delegate { Check(true); };
