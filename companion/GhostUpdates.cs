@@ -519,6 +519,7 @@ namespace GhostUI {
         private int contentHeight, dividerY;
         private string layoutKey, fitKey;
         internal bool IsCompact { get; private set; }
+        internal bool LauncherPressed { get { return IsCompact && launcher.Capture; } }
         internal readonly Label TitleLabel, VersionLabel, SummaryLabel, StatusLabel;
         internal readonly Button Primary, Later, Cancel, Confirm, Check, Manual;
         internal readonly LinkLabel Changes;
@@ -1042,11 +1043,13 @@ namespace GhostUI {
                 if (owner != IntPtr.Zero && owner != firefox) manualOpen = false;
                 if (now >= nextProbe && !probing && !manualOpen) Probe(firefox);
                 bool startPage = detectedWindow == firefox && detectedOrigin != null && now - detectedAt <= TimeSpan.FromMilliseconds(800);
-                bool compact = !manualOpen && (!offered || dismissed);
+                bool compact = card.LauncherPressed || !manualOpen && (!offered || dismissed);
                 // WinForms consults its stored IWin32Window during sizing too.
                 // Replace a closed Firefox owner's handle before any resize.
                 cardOwner.Window = firefox;
-                if (!manualOpen && !startPage) {
+                // Finish an explicit native launcher press even if Firefox's
+                // focus change invalidates the page probe before mouse-up.
+                if (!manualOpen && !startPage && !card.LauncherPressed) {
                     card.Hide(); owner = firefox;
                     card.SetShortcutEnabled(true);
                     return;

@@ -53,7 +53,7 @@ namespace GhostUI {
             Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 2 } } } });
             // The actor is on the UI thread. Let that thread process activation
             // and MouseDown before releasing, as an external human/test driver would.
-            var release = new System.Windows.Forms.Timer { Interval = 100 };
+            var release = new System.Windows.Forms.Timer { Interval = control == (Button)Field(card, "launcher") ? 500 : 100 };
             release.Tick += delegate {
                 release.Stop(); release.Dispose();
                 Send(new[] { new Input { Data = new InputData { Mouse = new MouseInput { Flags = 4 } } } });
