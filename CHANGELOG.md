@@ -2,7 +2,7 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
-## Unreleased
+## [1.3.1] - 2026-11-03
 
 ### Summary
 - Open update settings with a compact, neutral launcher that suits any wallpaper.
