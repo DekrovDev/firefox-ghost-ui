@@ -6,11 +6,14 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 
 ### Summary
 - Show the update button only on Bonjourr and Firefox home or new-tab pages.
+- Use a lighter, more transparent button with a smooth hover highlight.
 
 ### Details
 - Hide the button on websites, blank pages, private pages and unidentified documents.
 - Keep Ctrl+Alt+F8 available for manually opened update settings on other Firefox tabs.
 - Identify start pages even when daily checks are disabled or no update is available.
+- Sweep the button highlight from left to right and strengthen its border on hover.
+- Stop hover motion when hidden and respect Windows animation and high-contrast preferences.
 
 ## [1.3.1] - 2026-11-03
 

@@ -288,6 +288,16 @@ def main():
         state = wait(lambda s: s['launcherVisible'] and s['onScreen'], 'Compact entry is outside the visible working area')
         mouse_opens = state['openRequests']
         print(f"Native entry geometry: card=({state['cardX']},{state['cardY']},{state['cardWidth']},{state['cardHeight']}), workArea={state['screenWidth']}x{state['screenHeight']}", flush=True)
+        hover_deadline = time.monotonic() + 10
+        while not command('hover-launcher')['hoverDelivered']:
+            if time.monotonic() >= hover_deadline:
+                raise AssertionError('Native hover could not reach the own launcher')
+        hovered = wait(lambda s: s['launcherVisible'] and s['launcherHover'] == 1 and not s['launcherHoverAnimating'], 'Launcher hover did not settle and stop its timer')
+        assert hovered['openRequests'] == mouse_opens, 'Hover opened update settings without a click'
+        assert .73 <= hovered['launcherOpacity'] <= .75 or hovered['launcherOpacity'] == 1, hovered
+        capture_card('launcher')
+        command('leave-launcher')
+        wait(lambda s: s['launcherVisible'] and s['launcherHover'] == 0 and not s['launcherHoverAnimating'], 'Launcher hover did not fade out and stop')
         native_click('click-launcher')
         clicked = wait(lambda s: s['openRequests'] > mouse_opens and s['visible'] and s['inside'] and s['onScreen'], 'Actual launcher click did not open contained settings')
         assert clicked['nativeOwner'] == clicked['owner'], 'Native update-card ownership detached from Firefox'

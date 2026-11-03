@@ -415,21 +415,44 @@ namespace GhostUI {
     }
     // Keep native button input and accessibility; customize only its appearance.
     internal sealed class UpdateButton : Button {
-        internal bool PrimaryStyle, TextOnly, WrapText;
+        internal bool PrimaryStyle, TextOnly, WrapText, AnimatedLauncher;
         internal string Symbol;
         private bool hovered, pressed;
+        private double hoverProgress;
+        private long hoverStamp;
+        private readonly System.Windows.Forms.Timer hoverTimer = new System.Windows.Forms.Timer { Interval = 16 };
+        internal double HoverProgress { get { return hoverProgress; } }
+        internal bool HoverAnimating { get { return hoverTimer.Enabled; } }
         private readonly Font symbolFont = new Font("Segoe MDL2 Assets", 11);
         internal UpdateButton() {
             FlatStyle = FlatStyle.Flat; FlatAppearance.BorderSize = 0;
             UseVisualStyleBackColor = false; BackColor = UpdateVisuals.Surface;
             Cursor = Cursors.Hand; UseMnemonic = false;
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            hoverTimer.Tick += delegate {
+                long now = Stopwatch.GetTimestamp();
+                double step = (now - hoverStamp) / (double)Stopwatch.Frequency / .32;
+                hoverStamp = now;
+                hoverProgress = hovered ? Math.Min(1, hoverProgress + step) : Math.Max(0, hoverProgress - step);
+                if (hoverProgress == (hovered ? 1 : 0)) hoverTimer.Stop();
+                Invalidate();
+            };
         }
-        protected override void OnMouseEnter(EventArgs e) { hovered = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hovered = false; pressed = false; Invalidate(); base.OnMouseLeave(e); }
+        private void AnimateHover() {
+            if (!AnimatedLauncher) return;
+            if (!Enabled || !Visible || SystemInformation.HighContrast || !SystemInformation.IsMenuAnimationEnabled) {
+                hoverTimer.Stop(); hoverProgress = Enabled && Visible && hovered ? 1 : 0;
+            } else { hoverStamp = Stopwatch.GetTimestamp(); hoverTimer.Start(); }
+        }
+        protected override void OnMouseEnter(EventArgs e) { hovered = true; AnimateHover(); Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hovered = false; pressed = false; AnimateHover(); Invalidate(); base.OnMouseLeave(e); }
         protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
         protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
-        protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
+        protected override void OnEnabledChanged(EventArgs e) { AnimateHover(); Invalidate(); base.OnEnabledChanged(e); }
+        protected override void OnVisibleChanged(EventArgs e) {
+            if (!Visible && hoverTimer != null) { hoverTimer.Stop(); hoverProgress = 0; hovered = false; pressed = false; }
+            base.OnVisibleChanged(e);
+        }
         protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
         protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
         protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Space) { pressed = true; Invalidate(); } base.OnKeyDown(e); }
@@ -444,9 +467,24 @@ namespace GhostUI {
             if (Enabled && pressed && !highContrast) fill = PrimaryStyle ? Color.FromArgb(199, 199, 199) : Color.FromArgb(60, 60, 60);
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
-            using (var path = UpdateVisuals.Rounded(bounds, (int)Math.Round((TextOnly ? 5 : 9) * DeviceDpi / 96f))) {
-                if (!TextOnly || hovered || highContrast) using (var brush = new SolidBrush(fill)) e.Graphics.FillPath(brush, path);
-                if (!TextOnly && !PrimaryStyle) using (var pen = new Pen(highContrast ? SystemColors.WindowText : UpdateVisuals.ControlEdge)) e.Graphics.DrawPath(pen, path);
+            using (var path = UpdateVisuals.Rounded(bounds, (int)Math.Round((AnimatedLauncher ? 18 : TextOnly ? 5 : 9) * DeviceDpi / 96f))) {
+                if (AnimatedLauncher && !highContrast) {
+                    double ease = 1 - Math.Pow(1 - hoverProgress, 3);
+                    using (var brush = new SolidBrush(BackColor)) e.Graphics.FillPath(brush, path);
+                    if (ease > 0 && Width > 0 && Height > 0) {
+                        var saved = e.Graphics.Save();
+                        e.Graphics.SetClip(path);
+                        using (var sweep = new System.Drawing.Drawing2D.LinearGradientBrush(ClientRectangle,
+                            Color.FromArgb(48, 190, 190, 190), Color.FromArgb(8, 190, 190, 190), System.Drawing.Drawing2D.LinearGradientMode.Horizontal))
+                            e.Graphics.FillRectangle(sweep, 0, 0, (int)Math.Round(Width * ease), Height);
+                        e.Graphics.Restore(saved);
+                    }
+                    using (var pen = new Pen(Color.FromArgb((int)Math.Round(64 + 172 * (Focused ? 1 : ease)), 200, 200, 200)))
+                        e.Graphics.DrawPath(pen, path);
+                } else {
+                    if (!TextOnly || hovered || highContrast) using (var brush = new SolidBrush(fill)) e.Graphics.FillPath(brush, path);
+                    if (!TextOnly && !PrimaryStyle) using (var pen = new Pen(highContrast ? SystemColors.WindowText : UpdateVisuals.ControlEdge)) e.Graphics.DrawPath(pen, path);
+                }
             }
             var flags = TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter |
                 (WrapText ? TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl : TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
@@ -468,7 +506,7 @@ namespace GhostUI {
             }
             if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -4, -4), ink, fill);
         }
-        protected override void Dispose(bool disposing) { if (disposing) symbolFont.Dispose(); base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) { if (disposing) { hoverTimer.Dispose(); symbolFont.Dispose(); } base.Dispose(disposing); }
     }
     internal sealed class UpdateProfilePicker : ComboBox {
         private readonly Font symbolFont = new Font("Segoe MDL2 Assets", 9);
@@ -547,7 +585,7 @@ namespace GhostUI {
             DoubleBuffered = true;
             Controls.Add(body);
             launcher = new UpdateButton { Text = "Ghost UI updates", Symbol = "\uE72C", Dock = DockStyle.Fill, TextOnly = true,
-                BackColor = BackColor, Visible = false, AccessibleName = "Open Ghost UI update settings" };
+                BackColor = Color.FromArgb(54, 54, 54), AnimatedLauncher = true, Visible = false, AccessibleName = "Open Ghost UI update settings" };
             launcher.MouseDown += delegate(object sender, MouseEventArgs e) {
                 // A real click authorizes activation; automatic display and
                 // programmatic opening must remain nonactivating.
@@ -610,11 +648,12 @@ namespace GhostUI {
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; if (DismissRequested != null) DismissRequested(); } };
         }
         internal void SetCompact(bool compact) {
+            double opacity = SystemInformation.HighContrast ? 1 : compact ? .74 : .98;
+            if (Opacity != opacity) Opacity = opacity;
             if (IsCompact == compact) return;
             IsCompact = compact;
             if (compact) body.AutoScrollPosition = Point.Empty;
             body.Visible = !compact; launcher.Visible = compact;
-            Opacity = SystemInformation.HighContrast ? 1 : compact ? .90 : .98;
             ClientSize = compact ? new Size(S(176), S(38)) : new Size(S(400), Math.Max(S(300), contentHeight));
         }
         internal bool FitToWindow(Rectangle bounds) {

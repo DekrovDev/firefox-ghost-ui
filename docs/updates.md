@@ -12,7 +12,7 @@ Native pages do not identify a Firefox profile. When multiple registered profile
 
 Placement uses the largest visible intersection of Firefox and a monitor's working area, keeping controls away from the taskbar and reachable when Firefox extends beyond the screen. If that visible area is too small, resize or return Firefox onscreen before opening settings.
 
-The compact launcher uses a neutral translucent surface instead of matching a particular wallpaper color. The full card measures its summary and status text before placing the remaining controls. Narrow visible areas stack actions vertically and scroll the card rather than clipping the release summary. When the selected profile is already up to date, the inactive Download action is omitted; Check now, Check daily and the manual release links remain available.
+The compact launcher uses a light, neutral gray translucent surface instead of matching a particular wallpaper color. Hovering sweeps a highlight from left to right and makes the border clearer; leaving fades it back. The animation stops at rest or when the button is hidden, and respects Windows animation and high-contrast preferences. The full card measures its summary and status text before placing the remaining controls. Narrow visible areas stack actions vertically and scroll the card rather than clipping the release summary. When the selected profile is already up to date, the inactive Download action is omitted; Check now, Check daily and the manual release links remain available.
 
 The card shows the new and installed versions, a short English summary, a profile selector, and these actions:
 

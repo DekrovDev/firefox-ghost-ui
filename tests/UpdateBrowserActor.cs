@@ -292,6 +292,7 @@ namespace GhostUI {
                 string activationControl = null;
                 long mouseDownForeground = 0, clickForeground = 0;
                 bool shortcutClaimed = false;
+                bool hoverDelivered = false;
                 bool? handoffShortcutReleased = null;
                 object[] narrowLayouts = new object[0];
                 card.UserInteraction += delegate {
@@ -309,6 +310,16 @@ namespace GhostUI {
                         switch ((string)command["action"]) {
                             case "narrow-layouts": narrowLayouts = NarrowLayouts((IntPtr)Field(controller, "owner")); break;
                             case "capture-card": CaptureCard(root, card, command.ContainsKey("name") ? command["name"] as string : null); break;
+                            case "hover-launcher":
+                                var hoverEntry = (UpdateButton)Field(card, "launcher");
+                                Point hoverPoint = hoverEntry.PointToScreen(new Point(hoverEntry.Width / 2, hoverEntry.Height / 2));
+                                hoverDelivered = card.Visible && card.IsCompact && Native.WindowFromPoint(hoverPoint) == hoverEntry.Handle;
+                                if (hoverDelivered) Cursor.Position = hoverPoint;
+                                break;
+                            case "leave-launcher":
+                                Rectangle hoverOwner = Native.Bounds((IntPtr)Field(controller, "owner"));
+                                Cursor.Position = new Point(hoverOwner.Left + 40, hoverOwner.Top + 100);
+                                break;
                             case "scroll-checks": ((ScrollableControl)card.AutoCheck.Parent).ScrollControlIntoView(card.AutoCheck); break;
                             case "click-profile": Click(card.Profiles, card); break;
                             case "open-profile-keyboard":
@@ -353,7 +364,10 @@ namespace GhostUI {
                             case "profile-current":
                                 var profiles = (UpdateProfile[])Field(controller, "profiles");
                                 if (profiles.Length != 1) throw new InvalidDataException("Expected one disposable profile.");
-                                File.WriteAllText(Path.Combine(profiles[0].Path, "chrome", "ghost-ui", "state.json"), "{\"version\":\"9.9.9\"}");
+                                // Simulate a version update without dropping Bonjourr registration.
+                                var currentState = new System.Collections.Generic.Dictionary<string, object> { { "version", "9.9.9" } };
+                                if (profiles[0].Origin != null) currentState["bonjourrOrigin"] = profiles[0].Origin;
+                                File.WriteAllText(Path.Combine(profiles[0].Path, "chrome", "ghost-ui", "state.json"), UpdateRules.Json().Serialize(currentState));
                                 break;
                             case "later": card.Later.PerformClick(); break;
                             case "install": card.Primary.PerformClick(); break;
@@ -397,7 +411,7 @@ namespace GhostUI {
                     var forms = new System.Collections.Generic.List<string>();
                     foreach (Form form in Application.OpenForms)
                         forms.Add(form.GetType().Name + ":" + (form.IsHandleCreated ? form.Handle.ToInt64() : 0) + ":" + form.Visible);
-                    var launcher = (Button)Field(card, "launcher");
+                    var launcher = (UpdateButton)Field(card, "launcher");
                     int summaryHeight = SummaryHeight(card.SummaryLabel);
                     Rectangle summaryBounds = card.SummaryLabel.Bounds;
                     bool summaryFixedParentClips = card.SummaryLabel.Parent != null && card.SummaryLabel.Parent != card &&
@@ -406,6 +420,8 @@ namespace GhostUI {
                     string result = UpdateRules.Json().Serialize(new {
                         actor = Process.GetCurrentProcess().Id, ack = acknowledged, visible = card.Visible && !card.IsCompact,
                         launcherVisible = card.Visible && card.IsCompact, autoChecks = card.AutoCheck.Checked, checkEnabled = card.Check.Enabled,
+                        hoverDelivered = hoverDelivered, launcherHover = launcher.HoverProgress,
+                        launcherHoverAnimating = launcher.HoverAnimating, launcherOpacity = card.Opacity,
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
                         summaryVisible = card.SummaryLabel.Visible, summaryRequiredHeight = summaryHeight,
                         summaryAllocatedHeight = card.SummaryLabel.ClientSize.Height, summaryWidth = card.SummaryLabel.ClientSize.Width,
