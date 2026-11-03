@@ -565,6 +565,8 @@ namespace GhostUI {
                 using (var graphics = Graphics.FromHdc(context)) {
                     int barWidth = Width - ClientSize.Width, arrow = barWidth;
                     var bar = new Rectangle(ClientSize.Width, 0, barWidth, ClientSize.Height);
+                    if (bar.Height <= 0) return;
+                    graphics.SetClip(bar, System.Drawing.Drawing2D.CombineMode.Intersect);
                     using (var background = new SolidBrush(BackColor)) graphics.FillRectangle(background, bar);
                     var info = new ScrollInfo { Size = (uint)Marshal.SizeOf(typeof(ScrollInfo)), Mask = 7 };
                     if (!GetScrollInfo(window, 1, ref info)) return; // SB_VERT
@@ -577,7 +579,7 @@ namespace GhostUI {
                     graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                     using (var path = UpdateVisuals.Rounded(thumb, thumbWidth / 2))
                     using (var brush = new SolidBrush(UpdateVisuals.ControlEdge)) graphics.FillPath(brush, path);
-                    var flags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter;
+                    var flags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.PreserveGraphicsClipping;
                     TextRenderer.DrawText(graphics, "\uE70E", arrowFont, new Rectangle(bar.Left, 0, barWidth, arrow), UpdateVisuals.Muted, flags);
                     TextRenderer.DrawText(graphics, "\uE70D", arrowFont, new Rectangle(bar.Left, bar.Height - arrow, barWidth, arrow), UpdateVisuals.Muted, flags);
                 }
