@@ -34,6 +34,10 @@ namespace GhostUI {
         private static void Click(Control control, UpdateCard card) {
             clickDelivered = false;
             if (!card.Visible || !control.Visible || !control.Enabled) { clickDetail = "Native target is not currently visible/enabled."; return; }
+            // Resolve scrolling and hit testing in the same UI turn: a separate
+            // command lets an automatic-card page refresh invalidate the offset.
+            var scroller = control.Parent as ScrollableControl;
+            if (scroller != null && scroller.AutoScroll) scroller.ScrollControlIntoView(control);
             Point center = control.PointToScreen(new Point(control.Width / 2, control.Height / 2));
             Cursor.Position = center;
             IntPtr hit = Native.WindowFromPoint(center);
