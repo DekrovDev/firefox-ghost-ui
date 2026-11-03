@@ -482,9 +482,11 @@ namespace GhostUI {
         protected override void WndProc(ref Message message) {
             // Preserve the native ComboBox's input/notification path. UserPaint
             // changes that path; overlay only the collapsed face after painting.
+            int paintMessage = message.Msg;
+            IntPtr printContext = message.WParam;
             base.WndProc(ref message);
-            if ((message.Msg == 0x000f || message.Msg == 0x0317 || message.Msg == 0x0318) && IsHandleCreated && !IsDisposed && !Disposing) {
-                using (var graphics = message.WParam == IntPtr.Zero ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(message.WParam)) PaintFace(graphics);
+            if ((paintMessage == 0x000f || paintMessage == 0x0317 || paintMessage == 0x0318) && IsHandleCreated && !IsDisposed && !Disposing) {
+                using (var graphics = paintMessage == 0x000f || printContext == IntPtr.Zero ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(printContext)) PaintFace(graphics);
             }
         }
         private void PaintFace(Graphics graphics) {
