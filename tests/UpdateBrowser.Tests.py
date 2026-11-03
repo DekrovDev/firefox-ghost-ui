@@ -7,12 +7,14 @@ import argparse
 import ctypes
 from datetime import datetime, timezone
 import hashlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import time
+import threading
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +56,7 @@ def main():
     browser = None
     secondary = None
     actor = None
+    ordinary_server = None
     command_id = 0
     last = {}
 
@@ -295,6 +298,16 @@ def main():
         hovered = wait(lambda s: s['launcherVisible'] and s['launcherHover'] == 1 and not s['launcherHoverAnimating'], 'Launcher hover did not settle and stop its timer')
         assert hovered['openRequests'] == mouse_opens, 'Hover opened update settings without a click'
         assert .73 <= hovered['launcherOpacity'] <= .75 or hovered['launcherOpacity'] == 1, hovered
+        if not hovered['highContrast']:
+            for side in ('left', 'right'):
+                assert command('hover-launcher', side=side)['hoverDelivered']
+                wait(lambda s: s['launcherVisible'] and s['launcherHover'] == 1 and not s['launcherHoverAnimating'] and
+                     (s['glowTargetX'] < 20 if side == 'left' else s['glowTargetX'] > s['cardWidth'] - 20), f'{side} edge light did not settle')
+                energy = command('measure-launcher-glow')['glowEdgeBalance']
+                if side == 'left':
+                    left_energy = energy
+                else:
+                    assert left_energy > energy + 100, (left_energy, energy)
         capture_card('launcher')
         command('leave-launcher')
         wait(lambda s: s['launcherVisible'] and s['launcherHover'] == 0 and not s['launcherHoverAnimating'], 'Launcher hover did not fade out and stop')
@@ -428,6 +441,7 @@ def main():
         command('reset-startup-metric')
         cold_started = time.monotonic()
         browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', root / 'cold-start', headless=False, start_url='about:newtab')
+        browser.wait("return ['about:newtab','about:home'].includes(gBrowser.selectedBrowser.currentURI.spec);", timeout=12)
         cold_uri = browser.js('return gBrowser.selectedBrowser.currentURI.spec;')
         assert cold_uri in ('about:newtab', 'about:home'), f'Cold fixture did not load its start page: {cold_uri}'
         browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
@@ -439,10 +453,26 @@ def main():
         browser.close()
         browser = None
         wait(lambda s: not s['visible'] and not s['launcherVisible'], 'Cold browser closure retained controls')
-        command('reset-startup-metric')
-        browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', root / 'cold-ordinary', headless=False, start_url='about:blank')
+        class OrdinaryPage(BaseHTTPRequestHandler):
+            def do_GET(self):
+                page = b'<!doctype html><title>Ordinary startup fixture</title><p>Fixture</p>'
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(page)))
+                self.end_headers()
+                self.wfile.write(page)
+
+            def log_message(self, *args):
+                pass
+
+        ordinary_server = ThreadingHTTPServer(('127.0.0.1', 0), OrdinaryPage)
+        threading.Thread(target=ordinary_server.serve_forever, daemon=True).start()
+        ordinary_url = f'http://127.0.0.1:{ordinary_server.server_port}/ordinary'
+        browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', root / 'cold-ordinary', headless=False, start_url=ordinary_url)
+        browser.wait('return gBrowser.selectedBrowser.currentURI.spec === arguments[0];', args=[ordinary_url], timeout=12)
         ordinary_uri = browser.js('return gBrowser.selectedBrowser.currentURI.spec;')
-        assert ordinary_uri == 'about:blank', f'Cold fixture did not load its ordinary document: {ordinary_uri}'
+        assert ordinary_uri == ordinary_url, f'Cold fixture did not load its ordinary document: {ordinary_uri}'
+        command('reset-startup-metric')
         browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
         command('set-browser-pid', pid=browser.browser_pid)
         command('focus')
@@ -459,6 +489,9 @@ def main():
             browser.close()
         if secondary is not None:
             secondary.close()
+        if ordinary_server is not None:
+            ordinary_server.shutdown()
+            ordinary_server.server_close()
 
 
 if __name__ == '__main__':

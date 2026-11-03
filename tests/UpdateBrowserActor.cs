@@ -64,6 +64,20 @@ namespace GhostUI {
         private static object Field(object item, string name) {
             return item.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(item);
         }
+        private static long GlowEdgeBalance(UpdateCard card) {
+            if (!card.Visible || !card.IsCompact) throw new InvalidDataException("Edge sampling requires the visible own launcher.");
+            using (var bitmap = new Bitmap(card.Width, card.Height)) {
+                card.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+                long difference = 0;
+                int band = Math.Max(1, bitmap.Width / 24), half = Math.Max(1, bitmap.Height / 8);
+                for (int y = bitmap.Height / 2 - half; y <= bitmap.Height / 2 + half; y++)
+                    for (int x = 0; x < band; x++) {
+                        Color left = bitmap.GetPixel(x, y), right = bitmap.GetPixel(bitmap.Width - 1 - x, y);
+                        difference += left.R + left.G + left.B - right.R - right.G - right.B;
+                    }
+                return difference;
+            }
+        }
         private static int SummaryHeight(Label summary) {
             int width = Math.Max(1, summary.ClientSize.Width - summary.Padding.Horizontal);
             using (var graphics = summary.CreateGraphics()) {
@@ -293,6 +307,7 @@ namespace GhostUI {
                 long mouseDownForeground = 0, clickForeground = 0;
                 bool shortcutClaimed = false;
                 bool hoverDelivered = false;
+                long? glowEdgeBalance = null;
                 double? firstShowProbeDelayMs = null;
                 card.VisibleChanged += delegate {
                     if (card.Visible && Field(controller, "detectedOrigin") != null && firstShowProbeDelayMs == null)
@@ -317,9 +332,12 @@ namespace GhostUI {
                             case "capture-card": CaptureCard(root, card, command.ContainsKey("name") ? command["name"] as string : null); break;
                             case "reset-startup-metric": firstShowProbeDelayMs = null; break;
                             case "set-browser-pid": browser = Convert.ToInt32(command["pid"]); break;
+                            case "measure-launcher-glow": glowEdgeBalance = GlowEdgeBalance(card); break;
                             case "hover-launcher":
                                 var hoverEntry = (UpdateButton)Field(card, "launcher");
-                                Point hoverPoint = hoverEntry.PointToScreen(new Point(hoverEntry.Width / 2, hoverEntry.Height / 2));
+                                string hoverSide = command.ContainsKey("side") ? command["side"] as string : "center";
+                                int hoverX = hoverSide == "left" ? 12 : hoverSide == "right" ? hoverEntry.Width - 13 : hoverEntry.Width / 2;
+                                Point hoverPoint = hoverEntry.PointToScreen(new Point(hoverX, hoverEntry.Height / 2));
                                 hoverDelivered = card.Visible && card.IsCompact && Native.WindowFromPoint(hoverPoint) == hoverEntry.Handle;
                                 if (hoverDelivered) Cursor.Position = hoverPoint;
                                 break;
@@ -429,6 +447,8 @@ namespace GhostUI {
                         launcherVisible = card.Visible && card.IsCompact, autoChecks = card.AutoCheck.Checked, checkEnabled = card.Check.Enabled,
                         hoverDelivered = hoverDelivered, launcherHover = launcher.HoverProgress,
                         firstShowProbeDelayMs = firstShowProbeDelayMs,
+                        glowEdgeBalance = glowEdgeBalance, highContrast = SystemInformation.HighContrast,
+                        glowTargetX = ((PointF)Field(launcher, "glowTarget")).X,
                         launcherHoverAnimating = launcher.HoverAnimating, launcherOpacity = card.Opacity,
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
                         summaryVisible = card.SummaryLabel.Visible, summaryRequiredHeight = summaryHeight,

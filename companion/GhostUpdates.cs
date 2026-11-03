@@ -419,6 +419,8 @@ namespace GhostUI {
         internal string Symbol;
         private bool hovered, pressed;
         private double hoverProgress;
+        private PointF glowPoint, glowTarget;
+        private bool glowInitialized;
         private long hoverStamp;
         private readonly System.Windows.Forms.Timer hoverTimer = new System.Windows.Forms.Timer { Interval = 16 };
         internal double HoverProgress { get { return hoverProgress; } }
@@ -431,26 +433,47 @@ namespace GhostUI {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
             hoverTimer.Tick += delegate {
                 long now = Stopwatch.GetTimestamp();
-                double step = (now - hoverStamp) / (double)Stopwatch.Frequency / .32;
+                double seconds = Math.Max(0, (now - hoverStamp) / (double)Stopwatch.Frequency);
+                double step = seconds / .18;
                 hoverStamp = now;
                 hoverProgress = hovered ? Math.Min(1, hoverProgress + step) : Math.Max(0, hoverProgress - step);
-                if (hoverProgress == (hovered ? 1 : 0)) hoverTimer.Stop();
+                double follow = 1 - Math.Exp(-seconds / .065);
+                glowPoint = new PointF((float)(glowPoint.X + (glowTarget.X - glowPoint.X) * follow),
+                    (float)(glowPoint.Y + (glowTarget.Y - glowPoint.Y) * follow));
+                bool settled = Math.Abs(glowTarget.X - glowPoint.X) + Math.Abs(glowTarget.Y - glowPoint.Y) < .25;
+                if (settled) glowPoint = glowTarget;
+                if (hoverProgress == (hovered ? 1 : 0) && (!hovered || settled)) hoverTimer.Stop();
                 Invalidate();
             };
         }
-        private void AnimateHover() {
+        private void TrackGlow(Point point) {
             if (!AnimatedLauncher) return;
+            float right = Math.Max(1, Width - 1), bottom = Math.Max(1, Height - 1), radius = bottom / 2;
+            float x = Math.Max(0, Math.Min(right, point.X)), y = Math.Max(0, Math.Min(bottom, point.Y));
+            if (x < radius || x > right - radius) {
+                float center = x < radius ? radius : right - radius;
+                float dx = x - center, dy = y - radius;
+                double length = Math.Sqrt(dx * dx + dy * dy);
+                glowTarget = length < .01 ? new PointF(x < radius ? 0 : right, radius) :
+                    new PointF(center + (float)(dx / length * radius), radius + (float)(dy / length * radius));
+            } else glowTarget = new PointF(x, y < radius ? 0 : bottom);
+            if (!glowInitialized) { glowPoint = glowTarget; glowInitialized = true; }
+        }
+        private void AnimateHover() {
+            if (!AnimatedLauncher || Disposing || IsDisposed) return;
             if (!Enabled || !Visible || SystemInformation.HighContrast || !SystemInformation.IsMenuAnimationEnabled) {
                 hoverTimer.Stop(); hoverProgress = Enabled && Visible && hovered ? 1 : 0;
-            } else { hoverStamp = Stopwatch.GetTimestamp(); hoverTimer.Start(); }
+                glowPoint = glowTarget;
+            } else if (!hoverTimer.Enabled) { hoverStamp = Stopwatch.GetTimestamp(); hoverTimer.Start(); }
         }
-        protected override void OnMouseEnter(EventArgs e) { hovered = true; AnimateHover(); Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseEnter(EventArgs e) { hovered = true; if (AnimatedLauncher) TrackGlow(PointToClient(Cursor.Position)); AnimateHover(); Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseMove(MouseEventArgs e) { if (AnimatedLauncher) { TrackGlow(e.Location); AnimateHover(); Invalidate(); } base.OnMouseMove(e); }
         protected override void OnMouseLeave(EventArgs e) { hovered = false; pressed = false; AnimateHover(); Invalidate(); base.OnMouseLeave(e); }
         protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
         protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
         protected override void OnEnabledChanged(EventArgs e) { AnimateHover(); Invalidate(); base.OnEnabledChanged(e); }
         protected override void OnVisibleChanged(EventArgs e) {
-            if (!Visible && hoverTimer != null) { hoverTimer.Stop(); hoverProgress = 0; hovered = false; pressed = false; }
+            if (!Visible && hoverTimer != null && !Disposing && !IsDisposed) { hoverTimer.Stop(); hoverProgress = 0; hovered = false; pressed = false; glowInitialized = false; }
             base.OnVisibleChanged(e);
         }
         protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
@@ -471,16 +494,22 @@ namespace GhostUI {
                 if (AnimatedLauncher && !highContrast) {
                     double ease = 1 - Math.Pow(1 - hoverProgress, 3);
                     using (var brush = new SolidBrush(BackColor)) e.Graphics.FillPath(brush, path);
-                    if (ease > 0 && Width > 0 && Height > 0) {
-                        var saved = e.Graphics.Save();
-                        e.Graphics.SetClip(path);
-                        using (var sweep = new System.Drawing.Drawing2D.LinearGradientBrush(ClientRectangle,
-                            Color.FromArgb(48, 190, 190, 190), Color.FromArgb(8, 190, 190, 190), System.Drawing.Drawing2D.LinearGradientMode.Horizontal))
-                            e.Graphics.FillRectangle(sweep, 0, 0, (int)Math.Round(Width * ease), Height);
-                        e.Graphics.Restore(saved);
+                    using (var pen = new Pen(Color.FromArgb(Focused ? 160 : 64, 200, 200, 200))) e.Graphics.DrawPath(pen, path);
+                    if (ease > 0) {
+                        float radius = 48 * DeviceDpi / 96f;
+                        using (var area = new System.Drawing.Drawing2D.GraphicsPath()) {
+                            area.AddEllipse(glowPoint.X - radius, glowPoint.Y - radius, radius * 2, radius * 2);
+                            using (var glow = new System.Drawing.Drawing2D.PathGradientBrush(area)) {
+                                glow.WrapMode = System.Drawing.Drawing2D.WrapMode.Clamp;
+                                glow.CenterPoint = glowPoint;
+                                glow.SurroundColors = new[] { Color.FromArgb(0, 235, 235, 235) };
+                                glow.CenterColor = Color.FromArgb((int)Math.Round(36 * ease), 235, 235, 235);
+                                using (var halo = new Pen(glow, 5 * DeviceDpi / 96f)) e.Graphics.DrawPath(halo, path);
+                                glow.CenterColor = Color.FromArgb((int)Math.Round(225 * ease), 235, 235, 235);
+                                using (var edge = new Pen(glow, 1.2f * DeviceDpi / 96f)) e.Graphics.DrawPath(edge, path);
+                            }
+                        }
                     }
-                    using (var pen = new Pen(Color.FromArgb((int)Math.Round(64 + 172 * (Focused ? 1 : ease)), 200, 200, 200)))
-                        e.Graphics.DrawPath(pen, path);
                 } else {
                     if (!TextOnly || hovered || highContrast) using (var brush = new SolidBrush(fill)) e.Graphics.FillPath(brush, path);
                     if (!TextOnly && !PrimaryStyle) using (var pen = new Pen(highContrast ? SystemColors.WindowText : UpdateVisuals.ControlEdge)) e.Graphics.DrawPath(pen, path);
@@ -507,6 +536,54 @@ namespace GhostUI {
             if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -4, -4), ink, fill);
         }
         protected override void Dispose(bool disposing) { if (disposing) { hoverTimer.Dispose(); symbolFont.Dispose(); } base.Dispose(disposing); }
+    }
+    internal sealed class UpdateScrollPanel : Panel {
+        [StructLayout(LayoutKind.Sequential)] private struct ScrollInfo {
+            internal uint Size, Mask;
+            internal int Minimum, Maximum;
+            internal uint Page;
+            internal int Position, TrackPosition;
+        }
+        [DllImport("user32.dll")] private static extern IntPtr GetWindowDC(IntPtr window);
+        [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr window, IntPtr context);
+        [DllImport("user32.dll")] private static extern bool GetScrollInfo(IntPtr window, int bar, ref ScrollInfo info);
+        private readonly Font arrowFont = new Font("Segoe MDL2 Assets", 8);
+        protected override void WndProc(ref Message message) {
+            int kind = message.Msg;
+            IntPtr printContext = message.WParam;
+            long printFlags = message.LParam.ToInt64();
+            base.WndProc(ref message);
+            if (SystemInformation.HighContrast || !Visible || !IsHandleCreated || IsDisposed || Disposing || arrowFont == null) return;
+            bool printing = kind == 0x0317 && (printFlags & 2) != 0; // WM_PRINT / PRF_NONCLIENT
+            if (!printing && kind != 0x0085 && kind != 0x000f && kind != 0x0005 && kind != 0x0115 && kind != 0x020a && kind != 0x00a0 && kind != 0x031a) return;
+            if (!VerticalScroll.Visible || Width <= ClientSize.Width) return;
+            IntPtr window = Handle;
+            if (window == IntPtr.Zero) return; // A null GetWindowDC target means the desktop.
+            IntPtr context = printing ? printContext : GetWindowDC(window);
+            if (context == IntPtr.Zero) return;
+            try {
+                using (var graphics = Graphics.FromHdc(context)) {
+                    int barWidth = Width - ClientSize.Width, arrow = barWidth;
+                    var bar = new Rectangle(ClientSize.Width, 0, barWidth, ClientSize.Height);
+                    using (var background = new SolidBrush(BackColor)) graphics.FillRectangle(background, bar);
+                    var info = new ScrollInfo { Size = (uint)Marshal.SizeOf(typeof(ScrollInfo)), Mask = 7 };
+                    if (!GetScrollInfo(window, 1, ref info)) return; // SB_VERT
+                    int track = Math.Max(1, bar.Height - arrow * 2);
+                    long range = Math.Max(1, (long)info.Maximum - info.Minimum + 1);
+                    int thumbHeight = Math.Min(track, Math.Max((int)Math.Round(20 * DeviceDpi / 96f), (int)Math.Round(track * Math.Min(1, info.Page / (double)range))));
+                    double fraction = Math.Max(0, Math.Min(1, (info.Position - (double)info.Minimum) / Math.Max(1, range - (long)info.Page)));
+                    int thumbWidth = Math.Min(barWidth, Math.Max(3, (int)Math.Round(5 * DeviceDpi / 96f)));
+                    var thumb = new Rectangle(bar.Left + (barWidth - thumbWidth) / 2, arrow + (int)Math.Round((track - thumbHeight) * fraction), thumbWidth, thumbHeight);
+                    graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    using (var path = UpdateVisuals.Rounded(thumb, thumbWidth / 2))
+                    using (var brush = new SolidBrush(UpdateVisuals.ControlEdge)) graphics.FillPath(brush, path);
+                    var flags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter;
+                    TextRenderer.DrawText(graphics, "\uE70E", arrowFont, new Rectangle(bar.Left, 0, barWidth, arrow), UpdateVisuals.Muted, flags);
+                    TextRenderer.DrawText(graphics, "\uE70D", arrowFont, new Rectangle(bar.Left, bar.Height - arrow, barWidth, arrow), UpdateVisuals.Muted, flags);
+                }
+            } finally { if (!printing) ReleaseDC(window, context); }
+        }
+        protected override void Dispose(bool disposing) { if (disposing) arrowFont.Dispose(); base.Dispose(disposing); }
     }
     internal sealed class UpdateProfilePicker : ComboBox {
         private readonly Font symbolFont = new Font("Segoe MDL2 Assets", 9);
@@ -548,7 +625,7 @@ namespace GhostUI {
         internal event Action DismissRequested;
         internal event Action OpenRequested;
         internal event Action UserInteraction;
-        private readonly Panel body = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        private readonly UpdateScrollPanel body = new UpdateScrollPanel { Dock = DockStyle.Fill, AutoScroll = true };
         private readonly Button launcher;
         private readonly Label brand, statusIcon, profileCaption, summaryCaption;
         private readonly Button close;
