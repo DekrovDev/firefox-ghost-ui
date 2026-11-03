@@ -490,7 +490,8 @@ namespace GhostUI {
             }
         }
         private void PaintFace(Graphics graphics) {
-            graphics.Clear(BackColor); graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (var background = new SolidBrush(BackColor)) graphics.FillRectangle(background, ClientRectangle);
+            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             bool contrast = SystemInformation.HighContrast;
             Color ink = Enabled ? ForeColor : contrast ? SystemColors.GrayText : UpdateVisuals.Muted;
             using (var outline = UpdateVisuals.Rounded(new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), (int)Math.Round(7 * DeviceDpi / 96f)))
