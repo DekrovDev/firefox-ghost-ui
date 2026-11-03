@@ -2,7 +2,7 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
-## Unreleased
+## [1.3.2] - 2026-11-03
 
 ### Summary
 - Show the update button only on Bonjourr and Firefox home or new-tab pages.
