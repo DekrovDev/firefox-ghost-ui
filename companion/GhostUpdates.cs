@@ -474,25 +474,32 @@ namespace GhostUI {
         private readonly Font symbolFont = new Font("Segoe MDL2 Assets", 9);
         internal UpdateProfilePicker() {
             DropDownStyle = ComboBoxStyle.DropDownList; DrawMode = DrawMode.OwnerDrawFixed; FlatStyle = FlatStyle.Flat;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         }
         protected override void OnSelectedIndexChanged(EventArgs e) { base.OnSelectedIndexChanged(e); Invalidate(); }
         protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
         protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
         protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
-        protected override void OnPaint(PaintEventArgs e) {
-            e.Graphics.Clear(BackColor); e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        protected override void WndProc(ref Message message) {
+            // Preserve the native ComboBox's input/notification path. UserPaint
+            // changes that path; overlay only the collapsed face after painting.
+            base.WndProc(ref message);
+            if ((message.Msg == 0x000f || message.Msg == 0x0317 || message.Msg == 0x0318) && IsHandleCreated && !IsDisposed && !Disposing) {
+                using (var graphics = message.WParam == IntPtr.Zero ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(message.WParam)) PaintFace(graphics);
+            }
+        }
+        private void PaintFace(Graphics graphics) {
+            graphics.Clear(BackColor); graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             bool contrast = SystemInformation.HighContrast;
             Color ink = Enabled ? ForeColor : contrast ? SystemColors.GrayText : UpdateVisuals.Muted;
             using (var outline = UpdateVisuals.Rounded(new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), (int)Math.Round(7 * DeviceDpi / 96f)))
-            using (var pen = new Pen(contrast || Focused ? ForeColor : UpdateVisuals.ControlEdge)) e.Graphics.DrawPath(pen, outline);
+            using (var pen = new Pen(contrast || Focused ? ForeColor : UpdateVisuals.ControlEdge)) graphics.DrawPath(pen, outline);
             int arrow = (int)Math.Round(28 * DeviceDpi / 96f), pad = (int)Math.Round(10 * DeviceDpi / 96f);
             string text = SelectedIndex < 0 ? "Choose a profile" : GetItemText(SelectedItem);
-            TextRenderer.DrawText(e.Graphics, text, Font, new Rectangle(pad, 0, Math.Max(1, Width - arrow - pad), Height), ink,
+            TextRenderer.DrawText(graphics, text, Font, new Rectangle(pad, 0, Math.Max(1, Width - arrow - pad), Height), ink,
                 TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter);
-            TextRenderer.DrawText(e.Graphics, "\uE70D", symbolFont, new Rectangle(Width - arrow, 0, arrow, Height), ink,
+            TextRenderer.DrawText(graphics, "\uE70D", symbolFont, new Rectangle(Width - arrow, 0, arrow, Height), ink,
                 TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-            if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -4, -4), ink, BackColor);
+            if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(graphics, Rectangle.Inflate(ClientRectangle, -4, -4), ink, BackColor);
         }
         protected override void Dispose(bool disposing) { if (disposing) symbolFont.Dispose(); base.Dispose(disposing); }
     }
