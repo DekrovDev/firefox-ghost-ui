@@ -775,7 +775,11 @@ namespace GhostUI {
             if (disposing) { foreach (var font in ownedFonts) font.Dispose(); ownedFonts.Clear(); }
         }
         protected override bool ProcessCmdKey(ref Message message, Keys key) {
-            if (key == Keys.Escape) { if (DismissRequested != null) DismissRequested(); return true; }
+            if (key == Keys.Escape) {
+                if (Profiles.DroppedDown) { Profiles.DroppedDown = false; return true; }
+                if (DismissRequested != null) DismissRequested();
+                return true;
+            }
             return base.ProcessCmdKey(ref message, key);
         }
         private Label LabelAt(string text, int x, int y, int width, int height) {
