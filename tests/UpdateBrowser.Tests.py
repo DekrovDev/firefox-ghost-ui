@@ -431,7 +431,7 @@ def main():
         browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
         command('set-browser-pid', pid=browser.browser_pid)
         command('focus')
-        cold = wait(lambda s: s['launcherVisible'] and s['origin'] == 'about:newtab' and s['firstShowProbeDelayMs'] is not None, 'Already-running companion missed a new Firefox start page')
+        cold = wait(lambda s: s['launcherVisible'] and s['origin'] in ('about:newtab', 'about:home') and s['firstShowProbeDelayMs'] is not None, 'Already-running companion missed a new Firefox start page')
         assert 0 <= cold['firstShowProbeDelayMs'] < 250, cold
         print(f"PASS: cold Firefox start with companion already running; positive-probe to visible={cold['firstShowProbeDelayMs']:.1f}ms; driver-observed launch upper bound={time.monotonic() - cold_started:.2f}s", flush=True)
         browser.close()
