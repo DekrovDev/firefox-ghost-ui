@@ -666,6 +666,7 @@ namespace GhostUI {
             if (fitKey == fit && (IsCompact || body.ClientSize == fittedViewport && !body.HorizontalScroll.Visible)) return true;
             Point scroll = body.AutoScrollPosition;
             int measuredWidth = width;
+            bool converged = IsCompact;
             if (!IsCompact) {
                 body.AutoScrollPosition = Point.Empty;
                 body.AutoScrollMinSize = Size.Empty;
@@ -679,17 +680,19 @@ namespace GhostUI {
                     body.Bounds = ClientRectangle;
                     body.PerformLayout();
                     int viewport = Math.Max(1, body.ClientSize.Width);
-                    if (viewport == measuredWidth && !body.HorizontalScroll.Visible) break;
+                    if (viewport == measuredWidth && !body.HorizontalScroll.Visible) { converged = true; break; }
                     measuredWidth = viewport;
                     ArrangeContent(viewport, 0);
                 }
+                body.AutoScrollMinSize = new Size(0, contentHeight);
             } else body.AutoScrollMinSize = Size.Empty;
             Size fitted = new Size(width, Math.Min(IsCompact ? S(38) : contentHeight, maxHeight));
             if (ClientSize != fitted) ClientSize = fitted;
+            if (!IsCompact) { body.Bounds = ClientRectangle; body.PerformLayout(); }
             if (!IsCompact && body.AutoScrollPosition != scroll)
                 body.AutoScrollPosition = new Point(0, -scroll.Y);
             fittedViewport = body.ClientSize;
-            fitKey = IsCompact || !body.HorizontalScroll.Visible && measuredWidth == body.ClientSize.Width ? fit : null;
+            fitKey = (IsCompact || converged && !body.HorizontalScroll.Visible && measuredWidth == body.ClientSize.Width) ? fit : null;
             return true;
         }
         private int S(int value) { return (int)Math.Round(value * DeviceDpi / 96f); }
