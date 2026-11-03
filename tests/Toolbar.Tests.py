@@ -223,7 +223,7 @@ class JobProcess:
 
 
 class Firefox:
-    def __init__(self, executable, css, folder, headless=True, start_url="about:blank"):
+    def __init__(self, executable, css, folder, headless=True, start_url=None):
         profile = folder / "profile"
         (profile / "chrome").mkdir(parents=True, exist_ok=True)
         shutil.copyfile(css, profile / "chrome" / "userChrome.css")
@@ -246,12 +246,15 @@ class Firefox:
             # button visible for its coordinate-click check.
             "browser.download.autohideButton": False,
         }
+        if start_url is not None:
+            prefs["browser.startup.page"] = 1
+            prefs["browser.startup.homepage"] = start_url
         (profile / "user.js").write_text("\n".join(
             f"user_pref({json.dumps(k)}, {json.dumps(v)});" for k, v in prefs.items()
         ), encoding="utf8")
         self.process = JobProcess(
             [executable, *(["-headless"] if headless else []), "-no-remote", "-profile", str(profile),
-             "-marionette", "--remote-allow-system-access", start_url],
+             "-marionette", "--remote-allow-system-access", start_url or "about:blank"],
         )
         self.connection = None
         self.sequence = 0

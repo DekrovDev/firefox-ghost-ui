@@ -428,6 +428,8 @@ def main():
         command('reset-startup-metric')
         cold_started = time.monotonic()
         browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', root / 'cold-start', headless=False, start_url='about:newtab')
+        cold_uri = browser.js('return gBrowser.selectedBrowser.currentURI.spec;')
+        assert cold_uri in ('about:newtab', 'about:home'), f'Cold fixture did not load its start page: {cold_uri}'
         browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
         command('set-browser-pid', pid=browser.browser_pid)
         command('focus')
@@ -439,6 +441,8 @@ def main():
         wait(lambda s: not s['visible'] and not s['launcherVisible'], 'Cold browser closure retained controls')
         command('reset-startup-metric')
         browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', root / 'cold-ordinary', headless=False, start_url='about:blank')
+        ordinary_uri = browser.js('return gBrowser.selectedBrowser.currentURI.spec;')
+        assert ordinary_uri == 'about:blank', f'Cold fixture did not load its ordinary document: {ordinary_uri}'
         browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
         command('set-browser-pid', pid=browser.browser_pid)
         command('focus')
