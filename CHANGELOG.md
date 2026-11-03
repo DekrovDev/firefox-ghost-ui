@@ -2,6 +2,18 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
+## Unreleased
+
+### Summary
+- Fit the update card to its actual viewport and avoid unnecessary scrollbars.
+- Keep the standard arrow cursor over the update button.
+- Present a recognized start page without an extra polling delay.
+
+### Details
+- Reconcile the actual content viewport after resizing and keep horizontal scrolling at zero.
+- Use more of the available Firefox height before enabling vertical overflow in small windows.
+- Refresh presentation immediately after profile and page identification completes.
+
 ## [1.3.2] - 2026-11-03
 
 ### Summary

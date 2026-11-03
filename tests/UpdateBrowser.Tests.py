@@ -148,7 +148,7 @@ def main():
         state = wait(lambda s: s['visible'] and s['summaryVisible'] and
                      s['summaryAllocatedHeight'] >= s['summaryRequiredHeight'] and
                      not s['summaryFixedParentClips'] and not s['summaryOverlaps'] and
-                     not s['visibleLayoutIssues'], message)
+                     not s['visibleLayoutIssues'] and not s['scrollsHorizontally'], message)
         if expect_bullets:
             assert state['summaryLineCount'] == 3 and all(summary in state['summary'] for summary in summaries), state
         assert state['summaryAllocatedHeight'] >= state['summaryRequiredHeight'], state
@@ -419,6 +419,34 @@ def main():
         assert not state['primaryVisible'] and state['manualVisible'] and state['manualEnabled'] and state['dailyVisible'] and state['checkVisible'], state
         check_summary_layout('No-release settings clipped the unavailable-notes message', expect_bullets=False)
         capture_card('no-release')
+        command('later')
+        browser.close()
+        browser = None
+        secondary.close()
+        secondary = None
+        wait(lambda s: not s['visible'] and not s['launcherVisible'] and not s['shortcutRegistered'], 'Controls remained after both owned browsers closed')
+        command('reset-startup-metric')
+        cold_started = time.monotonic()
+        browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', root / 'cold-start', headless=False, start_url='about:newtab')
+        browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
+        command('set-browser-pid', pid=browser.browser_pid)
+        command('focus')
+        cold = wait(lambda s: s['launcherVisible'] and s['origin'] == 'about:newtab' and s['firstShowProbeDelayMs'] is not None, 'Already-running companion missed a new Firefox start page')
+        assert 0 <= cold['firstShowProbeDelayMs'] < 250, cold
+        print(f"PASS: cold Firefox start with companion already running; positive-probe to visible={cold['firstShowProbeDelayMs']:.1f}ms; driver-observed launch upper bound={time.monotonic() - cold_started:.2f}s", flush=True)
+        browser.close()
+        browser = None
+        wait(lambda s: not s['visible'] and not s['launcherVisible'], 'Cold browser closure retained controls')
+        command('reset-startup-metric')
+        browser = toolbar.Firefox(args.firefox, ROOT / 'theme/userChrome.css', root / 'cold-ordinary', headless=False, start_url='about:blank')
+        browser.browser_pid = int(browser.js('return Services.appinfo.processID;'))
+        command('set-browser-pid', pid=browser.browser_pid)
+        command('focus')
+        time.sleep(1)
+        ordinary = wait(lambda s: s['ownerIsForeground'] and s['shortcutRegistered'], 'Ordinary startup did not enable manual keyboard access')
+        assert not ordinary['visible'] and not ordinary['launcherVisible'] and ordinary['firstShowProbeDelayMs'] is None, ordinary
+        native_shortcut()
+        wait(lambda s: s['visible'] and s['cardIsForeground'], 'Ordinary cold startup lost manual settings')
         print('PASS: start-page-only launcher, extension and native Firefox URL/MSAA, no-Bonjourr/no-CSS registration, home/newtab automatic cards, manual shortcut on other tabs, daily settings, foreground hiding, session/cache reminders, confirmation/cancellation and handoff recovery', flush=True)
     finally:
         if actor is not None:

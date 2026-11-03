@@ -293,6 +293,11 @@ namespace GhostUI {
                 long mouseDownForeground = 0, clickForeground = 0;
                 bool shortcutClaimed = false;
                 bool hoverDelivered = false;
+                double? firstShowProbeDelayMs = null;
+                card.VisibleChanged += delegate {
+                    if (card.Visible && Field(controller, "detectedOrigin") != null && firstShowProbeDelayMs == null)
+                        firstShowProbeDelayMs = (DateTime.UtcNow - (DateTime)Field(controller, "detectedAt")).TotalMilliseconds;
+                };
                 bool? handoffShortcutReleased = null;
                 object[] narrowLayouts = new object[0];
                 card.UserInteraction += delegate {
@@ -310,6 +315,8 @@ namespace GhostUI {
                         switch ((string)command["action"]) {
                             case "narrow-layouts": narrowLayouts = NarrowLayouts((IntPtr)Field(controller, "owner")); break;
                             case "capture-card": CaptureCard(root, card, command.ContainsKey("name") ? command["name"] as string : null); break;
+                            case "reset-startup-metric": firstShowProbeDelayMs = null; break;
+                            case "set-browser-pid": browser = Convert.ToInt32(command["pid"]); break;
                             case "hover-launcher":
                                 var hoverEntry = (UpdateButton)Field(card, "launcher");
                                 Point hoverPoint = hoverEntry.PointToScreen(new Point(hoverEntry.Width / 2, hoverEntry.Height / 2));
@@ -421,6 +428,7 @@ namespace GhostUI {
                         actor = Process.GetCurrentProcess().Id, ack = acknowledged, visible = card.Visible && !card.IsCompact,
                         launcherVisible = card.Visible && card.IsCompact, autoChecks = card.AutoCheck.Checked, checkEnabled = card.Check.Enabled,
                         hoverDelivered = hoverDelivered, launcherHover = launcher.HoverProgress,
+                        firstShowProbeDelayMs = firstShowProbeDelayMs,
                         launcherHoverAnimating = launcher.HoverAnimating, launcherOpacity = card.Opacity,
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
                         summaryVisible = card.SummaryLabel.Visible, summaryRequiredHeight = summaryHeight,
@@ -439,6 +447,9 @@ namespace GhostUI {
                         profileDroppedDown = card.Profiles.DroppedDown, profileEnabled = card.Profiles.Enabled,
                         profileRole = card.Profiles.AccessibilityObject.Role.ToString(), profileAccessibleName = card.Profiles.AccessibleName,
                         scrollsVertically = ((Panel)Field(card, "body")).VerticalScroll.Visible,
+                        scrollsHorizontally = ((Panel)Field(card, "body")).HorizontalScroll.Visible,
+                        viewportWidth = ((Panel)Field(card, "body")).ClientSize.Width,
+                        viewportHeight = ((Panel)Field(card, "body")).ClientSize.Height,
                         destination = card.Destination.Text,
                         launching = (bool)Field(controller, "launching"), status = card.StatusLabel.Text,
                         handoffShortcutReleased = handoffShortcutReleased,

@@ -223,7 +223,7 @@ class JobProcess:
 
 
 class Firefox:
-    def __init__(self, executable, css, folder, headless=True):
+    def __init__(self, executable, css, folder, headless=True, start_url="about:blank"):
         profile = folder / "profile"
         (profile / "chrome").mkdir(parents=True, exist_ok=True)
         shutil.copyfile(css, profile / "chrome" / "userChrome.css")
@@ -251,7 +251,7 @@ class Firefox:
         ), encoding="utf8")
         self.process = JobProcess(
             [executable, *(["-headless"] if headless else []), "-no-remote", "-profile", str(profile),
-             "-marionette", "--remote-allow-system-access", "about:blank"],
+             "-marionette", "--remote-allow-system-access", start_url],
         )
         self.connection = None
         self.sequence = 0

@@ -556,6 +556,7 @@ namespace GhostUI {
         private bool showAction = true, showConfirm, showCancel, showDestination;
         private int contentHeight, dividerY;
         private string layoutKey, fitKey;
+        private Size fittedViewport;
         internal bool IsCompact { get; private set; }
         internal bool LauncherPressed { get { return IsCompact && launcher.Capture; } }
         internal readonly Label TitleLabel, VersionLabel, SummaryLabel, StatusLabel;
@@ -585,7 +586,7 @@ namespace GhostUI {
             DoubleBuffered = true;
             Controls.Add(body);
             launcher = new UpdateButton { Text = "Ghost UI updates", Symbol = "\uE72C", Dock = DockStyle.Fill, TextOnly = true,
-                BackColor = Color.FromArgb(54, 54, 54), AnimatedLauncher = true, Visible = false, AccessibleName = "Open Ghost UI update settings" };
+                BackColor = Color.FromArgb(54, 54, 54), AnimatedLauncher = true, Cursor = Cursors.Default, Visible = false, AccessibleName = "Open Ghost UI update settings" };
             launcher.MouseDown += delegate(object sender, MouseEventArgs e) {
                 // A real click authorizes activation; automatic display and
                 // programmatic opening must remain nonactivating.
@@ -659,22 +660,36 @@ namespace GhostUI {
         internal bool FitToWindow(Rectangle bounds) {
             if (bounds.Width < 300 || bounds.Height < 280) return false;
             int width = Math.Min(S(IsCompact ? 176 : 400), bounds.Width - 64);
-            int maxHeight = bounds.Height - 100;
+            int maxHeight = bounds.Height - S(48);
             string fit = width + ":" + maxHeight + ":" + DeviceDpi + ":" + IsCompact + ":" + showAction + ":" + showConfirm + ":" + showCancel + ":" + showDestination +
                 ":" + TitleLabel.Text + ":" + VersionLabel.Text + ":" + SummaryLabel.Text + ":" + StatusLabel.Text + ":" + Primary.Text;
-            if (fitKey == fit) return true;
+            if (fitKey == fit && (IsCompact || body.ClientSize == fittedViewport && !body.HorizontalScroll.Visible)) return true;
             Point scroll = body.AutoScrollPosition;
+            int measuredWidth = width;
             if (!IsCompact) {
+                body.AutoScrollPosition = Point.Empty;
+                body.AutoScrollMinSize = Size.Empty;
+                ClientSize = new Size(width, maxHeight);
+                body.Bounds = ClientRectangle;
                 ArrangeContent(width, 0);
-                // Measure again with the width actually available beside a vertical scrollbar.
-                if (contentHeight > maxHeight) ArrangeContent(width, SystemInformation.VerticalScrollBarWidth);
-                body.AutoScrollMinSize = new Size(0, contentHeight);
+                for (int pass = 0; pass < 4; pass++) {
+                    body.AutoScrollMinSize = new Size(0, contentHeight);
+                    Size full = new Size(width, Math.Min(contentHeight, maxHeight));
+                    if (ClientSize != full) ClientSize = full;
+                    body.Bounds = ClientRectangle;
+                    body.PerformLayout();
+                    int viewport = Math.Max(1, body.ClientSize.Width);
+                    if (viewport == measuredWidth && !body.HorizontalScroll.Visible) break;
+                    measuredWidth = viewport;
+                    ArrangeContent(viewport, 0);
+                }
             } else body.AutoScrollMinSize = Size.Empty;
             Size fitted = new Size(width, Math.Min(IsCompact ? S(38) : contentHeight, maxHeight));
             if (ClientSize != fitted) ClientSize = fitted;
             if (!IsCompact && body.AutoScrollPosition != scroll)
-                body.AutoScrollPosition = new Point(-scroll.X, -scroll.Y);
-            fitKey = fit;
+                body.AutoScrollPosition = new Point(0, -scroll.Y);
+            fittedViewport = body.ClientSize;
+            fitKey = IsCompact || !body.HorizontalScroll.Visible && measuredWidth == body.ClientSize.Width ? fit : null;
             return true;
         }
         private int S(int value) { return (int)Math.Round(value * DeviceDpi / 96f); }
@@ -781,6 +796,7 @@ namespace GhostUI {
             } finally { body.ResumeLayout(false); }
         }
         private static void Place(Control control, int x, int y, int width, int height, Point offset) {
+            if (control.Margin != Padding.Empty) control.Margin = Padding.Empty;
             var bounds = new Rectangle(x + offset.X, y + offset.Y, width, height);
             if (control.Bounds != bounds) control.Bounds = bounds;
         }
@@ -935,7 +951,7 @@ namespace GhostUI {
                 Post(delegate {
                     refreshPending = false;
                     profileCheckedAt = DateTime.UtcNow;
-                    if (String.Join("|", profiles.Select(p => p.Path + p.Version + p.Origin)) == String.Join("|", found.Select(p => p.Path + p.Version + p.Origin))) return;
+                    if (String.Join("|", profiles.Select(p => p.Path + p.Version + p.Origin)) == String.Join("|", found.Select(p => p.Path + p.Version + p.Origin))) { Tick(); return; }
                     // A formerly automatic sole-profile choice is no longer
                     // sufficient when another destination becomes available.
                     bool ambiguousGrowth = found.Length > profiles.Length && found.Length > 1;
@@ -944,6 +960,7 @@ namespace GhostUI {
                     card.Profiles.SelectedIndex = Math.Max(-1, Array.FindIndex(found, p => p.Path == selected));
                     if (card.Profiles.SelectedIndex < 0) SelectContextProfile();
                     Render();
+                    Tick();
                 });
             });
         }
@@ -1079,7 +1096,7 @@ namespace GhostUI {
                 bool dismissed = UpdateRules.IsDismissed(state, session, version);
                 // Identify start pages even when checks are disabled or no update
                 // is offered: only those pages may show the compact launcher.
-                if (owner != IntPtr.Zero && owner != firefox) manualOpen = false;
+                if (owner != firefox) { manualOpen = false; nextProbe = DateTime.MinValue; }
                 if (now >= nextProbe && !probing && !manualOpen) Probe(firefox);
                 bool startPage = detectedWindow == firefox && detectedOrigin != null && now - detectedAt <= TimeSpan.FromMilliseconds(800);
                 bool compact = card.LauncherPressed || !manualOpen && (!offered || dismissed);
@@ -1116,7 +1133,11 @@ namespace GhostUI {
             var thread = new Thread(delegate() {
                 string origin = null;
                 try { origin = StartPageProbe.Origin(window, origins); } catch { }
-                Post(delegate { probing = false; if (page != pageGeneration) return; detectedWindow = window; detectedOrigin = origin; detectedAt = DateTime.UtcNow; });
+                Post(delegate {
+                    probing = false;
+                    if (page == pageGeneration) { detectedWindow = window; detectedOrigin = origin; detectedAt = DateTime.UtcNow; }
+                    Tick();
+                });
             });
             thread.IsBackground = true; thread.SetApartmentState(ApartmentState.MTA); thread.Start();
         }
