@@ -189,8 +189,11 @@ def main():
         command('focus')
         wait(lambda s: s['visible'], 'Automatic card did not return after fixture reminder reset')
         browser.command('WebDriver:Navigate', {'url': 'about:blank'})
-        wait(lambda s: not s['visible'] and s['launcherVisible'], 'Unrelated page did not retain only the manual entry')
-        capture_card('launcher')
+        wait(lambda s: not s['visible'] and not s['launcherVisible'] and s['shortcutRegistered'], 'Unrelated page retained the update button or lost its manual shortcut')
+        time.sleep(1)
+        assert not wait(lambda s: True, 'Unrelated-page status missing')['launcherVisible']
+        browser.command('WebDriver:Navigate', {'url': 'data:text/html,<title>Ordinary fixture tab</title><p>Fixture</p>'})
+        wait(lambda s: not s['visible'] and not s['launcherVisible'] and s['shortcutRegistered'], 'Ordinary document retained the start-page button')
         browser.command('WebDriver:Navigate', {'url': origin + 'index.html'})
         wait(lambda s: s['visible'], 'Card did not return to the start page')
         command('other')
@@ -198,7 +201,8 @@ def main():
         command('focus')
         wait(lambda s: s['visible'], 'Card did not return with Firefox focus')
         command('later')
-        wait(lambda s: not s['visible'], 'Later did not dismiss the card')
+        wait(lambda s: not s['visible'] and s['launcherVisible'], 'Later did not retain the start-page button')
+        capture_card('launcher')
         stop_actor()
         # Same Firefox process and session, so the dismissed card correctly
         # stays hidden and the foreground condition no longer applies.
@@ -254,6 +258,10 @@ def main():
         assert not json.loads((root / 'updates/updates.json').read_text(encoding='utf-8'))['Disabled']
         command('later')
         wait(lambda s: not s['visible'] and s['launcherVisible'], 'Up-to-date profile lost its manual entry')
+        browser.command('WebDriver:Navigate', {'url': 'about:blank'})
+        wait(lambda s: not s['visible'] and not s['launcherVisible'], 'Up-to-date profile showed the button on a blank page')
+        browser.command('WebDriver:Navigate', {'url': origin + 'index.html'})
+        wait(lambda s: s['launcherVisible'] and not s['visible'], 'Up-to-date profile did not restore its start-page button')
         stop_actor()
         browser.close()
         browser = None
@@ -264,8 +272,8 @@ def main():
         browser.command('WebDriver:Navigate', {'url': 'about:home'})
         wait(lambda s: s['visible'] and s['origin'] == 'about:home', 'Native Firefox home card did not appear')
         browser.command('WebDriver:Navigate', {'url': 'about:blank'})
-        wait(lambda s: s['launcherVisible'] and not s['visible'], 'Blank page automatically expanded the card')
-        command('open-settings')
+        wait(lambda s: not s['launcherVisible'] and not s['visible'] and s['shortcutRegistered'], 'Blank page retained the update button or lost its shortcut')
+        native_shortcut()
         state = wait(lambda s: s['visible'] and s['checkEnabled'], 'Manual settings unavailable on an ordinary tab')
         assert state['autoChecks'], state
         command('install')
@@ -317,13 +325,13 @@ def main():
         browser.js('window.__ghostPrivate=OpenBrowserWindow({private:true});return true;')
         browser.wait('return !!window.__ghostPrivate?.gBrowser?.selectedBrowser;')
         browser.js('window.__ghostPrivate.focus();return true;')
-        state = wait(lambda s: s['owner'] != regular_owner and s['launcherVisible'] and not s['visible'], 'Private window did not retain only manual access')
+        state = wait(lambda s: s['owner'] != regular_owner and not s['launcherVisible'] and not s['visible'] and s['shortcutRegistered'], 'Private window retained the update button or lost its shortcut')
         # Remove fixture reminder state so a wrong private-page auto-match
         # cannot be masked by an earlier Later in the same browser process.
         command('clear-dismissals')
         time.sleep(1.5)
         state = wait(lambda s: True, 'Private-window probe did not report')
-        assert state['launcherVisible'] and not state['visible'], state
+        assert not state['launcherVisible'] and not state['visible'], state
         native_shortcut()
         wait(lambda s: s['visible'] and s['cardIsForeground'], 'Private-window manual shortcut unavailable')
         command('later')
@@ -401,7 +409,7 @@ def main():
         assert not state['primaryVisible'] and state['manualVisible'] and state['manualEnabled'] and state['dailyVisible'] and state['checkVisible'], state
         check_summary_layout('No-release settings clipped the unavailable-notes message', expect_bullets=False)
         capture_card('no-release')
-        print('PASS: extension and native Firefox URL/MSAA, no-Bonjourr/no-CSS registration, native home/newtab automatic cards, manual access on other tabs, daily settings, foreground hiding, session/cache reminders, confirmation/cancellation and handoff recovery', flush=True)
+        print('PASS: start-page-only launcher, extension and native Firefox URL/MSAA, no-Bonjourr/no-CSS registration, home/newtab automatic cards, manual shortcut on other tabs, daily settings, foreground hiding, session/cache reminders, confirmation/cancellation and handoff recovery', flush=True)
     finally:
         if actor is not None:
             actor.close()

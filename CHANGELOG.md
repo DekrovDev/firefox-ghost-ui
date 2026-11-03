@@ -2,6 +2,16 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
+## Unreleased
+
+### Summary
+- Show the update button only on Bonjourr and Firefox home or new-tab pages.
+
+### Details
+- Hide the button on websites, blank pages, private pages and unidentified documents.
+- Keep Ctrl+Alt+F8 available for manually opened update settings on other Firefox tabs.
+- Identify start pages even when daily checks are disabled or no update is available.
+
 ## [1.3.1] - 2026-11-03
 
 ### Summary

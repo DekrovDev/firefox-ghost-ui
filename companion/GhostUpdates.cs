@@ -761,11 +761,11 @@ namespace GhostUI {
                 message.Result = new IntPtr(1); // MA_ACTIVATE
                 return;
             }
-            if (message.Msg == 0x0312 && message.WParam.ToInt32() == 3 && Visible) {
+            if (message.Msg == 0x0312 && message.WParam.ToInt32() == 3) {
                 IntPtr foreground = Native.GetForegroundWindow();
                 if (Native.IsFirefox(foreground) || foreground == Handle || Native.GetAncestor(foreground, 2) == Handle) {
                     if (OpenRequested != null) OpenRequested();
-                    Native.SetForegroundWindow(Handle);
+                    if (Visible) Native.SetForegroundWindow(Handle);
                 }
             }
             base.WndProc(ref message);
@@ -1037,15 +1037,20 @@ namespace GhostUI {
                 using (var process = Process.GetProcessById((int)pid)) session = pid + ":" + process.StartTime.ToUniversalTime().Ticks;
                 string version = state.Release == null ? "none" : state.Release.Version;
                 bool dismissed = UpdateRules.IsDismissed(state, session, version);
-                // A failed/unknown page probe only suppresses automatic expansion.
-                // The manual entry uses verified Firefox HWND identity on every tab.
+                // Identify start pages even when checks are disabled or no update
+                // is offered: only those pages may show the compact launcher.
                 if (owner != IntPtr.Zero && owner != firefox) manualOpen = false;
-                if (now >= nextProbe && !probing && offered && !dismissed && !manualOpen) Probe(firefox);
+                if (now >= nextProbe && !probing && !manualOpen) Probe(firefox);
                 bool startPage = detectedWindow == firefox && detectedOrigin != null && now - detectedAt <= TimeSpan.FromMilliseconds(800);
-                bool compact = !manualOpen && (!offered || dismissed || !startPage);
+                bool compact = !manualOpen && (!offered || dismissed);
                 // WinForms consults its stored IWin32Window during sizing too.
                 // Replace a closed Firefox owner's handle before any resize.
                 cardOwner.Window = firefox;
+                if (!manualOpen && !startPage) {
+                    card.Hide(); owner = firefox;
+                    card.SetShortcutEnabled(true);
+                    return;
+                }
                 card.SetCompact(compact);
                 Rectangle bounds = UpdateRules.VisibleBounds(Native.Bounds(firefox), Screen.AllScreens.Select(screen => screen.WorkingArea).ToArray());
                 if (!card.FitToWindow(bounds)) { card.Hide(); card.SetShortcutEnabled(false); return; }
