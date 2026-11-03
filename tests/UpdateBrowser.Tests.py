@@ -236,7 +236,9 @@ def main():
         # Simulate Firefox reopening between the parent check and the helper
         # check. The real helper must reject and the still-running card recover.
         handoff = command('handoff-failure')
-        assert not handoff['shortcutRegistered'], 'A hidden installer handoff retained the update shortcut'
+        assert handoff['handoffShortcutReleased'], 'Installer handoff did not hide its card and release the shortcut synchronously'
+        if handoff['launching']:
+            assert not handoff['shortcutRegistered'], 'A hidden installer handoff retained the update shortcut'
         wait(lambda s: not s['launching'] and s['visible'] and 'not installed' in s['status'], 'Failed pre-stop helper did not restore a retryable card')
         command('later')
         command('profile-current')

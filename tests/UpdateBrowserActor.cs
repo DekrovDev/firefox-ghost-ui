@@ -292,6 +292,7 @@ namespace GhostUI {
                 string activationControl = null;
                 long mouseDownForeground = 0, clickForeground = 0;
                 bool shortcutClaimed = false;
+                bool? handoffShortcutReleased = null;
                 object[] narrowLayouts = new object[0];
                 card.UserInteraction += delegate {
                     mouseActivations++;
@@ -360,6 +361,7 @@ namespace GhostUI {
                             case "cancel": card.Cancel.PerformClick(); break;
                             case "handoff-failure":
                                 typeof(UpdateController).GetMethod("LaunchInstall", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(controller, null);
+                                handoffShortcutReleased = (bool)Field(controller, "launching") && !card.Visible && !(bool)Field(card, "shortcutRegistered");
                                 break;
                             case "other": other.Show(); other.Activate(); break;
                             case "focus":
@@ -423,6 +425,7 @@ namespace GhostUI {
                         scrollsVertically = ((Panel)Field(card, "body")).VerticalScroll.Visible,
                         destination = card.Destination.Text,
                         launching = (bool)Field(controller, "launching"), status = card.StatusLabel.Text,
+                        handoffShortcutReleased = handoffShortcutReleased,
                         approved = (DateTime)Field(controller, "consentUntil") > DateTime.UtcNow,
                         origin = Field(controller, "detectedOrigin"), profiles = card.Profiles.Items.Count,
                         inside = browserBounds.Contains(bounds),
