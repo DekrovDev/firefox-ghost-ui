@@ -14,6 +14,7 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 - Measure summary and status text before placing profile controls and actions.
 - Preserve scrolling, explicit profile selection and separate download and installation consent.
 - Keep Check now, Check daily and manual release links reachable in every update state.
+- Restore the update card on the remaining Firefox window after its previous owner closes.
 
 ## [1.3.0] - 2026-11-02
 

@@ -812,6 +812,11 @@ namespace GhostUI {
         private UpdateState state;
         private UpdateProfile[] profiles = new UpdateProfile[0];
         private readonly UpdateCard card = new UpdateCard();
+        private sealed class CardOwner : IWin32Window {
+            internal IntPtr Window;
+            public IntPtr Handle { get { return Window; } }
+        }
+        private readonly CardOwner cardOwner = new CardOwner();
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         private bool busy, ready, disposed, probing, refreshPending, confirming, launching;
         private bool manualOpen;
@@ -906,6 +911,7 @@ namespace GhostUI {
             IntPtr foreground = Native.GetForegroundWindow();
             IntPtr firefox = foreground == card.Handle || Native.GetAncestor(foreground, 2) == card.Handle ? owner : foreground;
             if (!Native.IsFirefox(firefox) || Native.IsIconic(firefox) || Fullscreen(firefox)) return;
+            cardOwner.Window = firefox;
             bool changed = owner != firefox;
             bool alreadyOpen = card.Visible && !card.IsCompact && !changed;
             if (changed) { card.Hide(); owner = firefox; detectedOrigin = null; pageGeneration++; }
@@ -1032,6 +1038,9 @@ namespace GhostUI {
                 if (now >= nextProbe && !probing && offered && !dismissed && !manualOpen) Probe(firefox);
                 bool startPage = detectedWindow == firefox && detectedOrigin != null && now - detectedAt <= TimeSpan.FromMilliseconds(800);
                 bool compact = !manualOpen && (!offered || dismissed || !startPage);
+                // WinForms consults its stored IWin32Window during sizing too.
+                // Replace a closed Firefox owner's handle before any resize.
+                cardOwner.Window = firefox;
                 card.SetCompact(compact);
                 Rectangle bounds = UpdateRules.VisibleBounds(Native.Bounds(firefox), Screen.AllScreens.Select(screen => screen.WorkingArea).ToArray());
                 if (!card.FitToWindow(bounds)) { card.Hide(); card.SetShortcutEnabled(false); return; }
@@ -1043,7 +1052,7 @@ namespace GhostUI {
                     if (consentUntil == DateTime.MinValue) {
                         if (!manualOpen) SelectContextProfile();
                     }
-                    card.Show(new WindowOwner(firefox));
+                    card.Show(cardOwner);
                 }
                 card.SetShortcutEnabled(true);
             } catch { card.Hide(); card.SetShortcutEnabled(false); }
