@@ -281,6 +281,9 @@ namespace GhostUI {
                 var card = (UpdateCard)Field(controller, "card");
                 int acknowledged = 0;
                 int openRequests = 0;
+                int profileSelections = 0, profileCommits = 0;
+                card.Profiles.SelectedIndexChanged += delegate { profileSelections++; };
+                card.Profiles.SelectionChangeCommitted += delegate { profileCommits++; };
                 int mouseActivations = 0;
                 string activationControl = null;
                 long mouseDownForeground = 0, clickForeground = 0;
@@ -409,6 +412,8 @@ namespace GhostUI {
                         manual = card.Manual.Text, manualEnabled = card.Manual.Enabled,
                         ready = (bool)Field(controller, "ready"), confirming = card.Confirm.Visible,
                         primaryEnabled = card.Primary.Enabled, selectedProfile = card.Profiles.SelectedIndex,
+                        profileSelections = profileSelections, profileCommits = profileCommits,
+                        bodyScrollY = ((Panel)Field(card, "body")).AutoScrollPosition.Y,
                         profileDroppedDown = card.Profiles.DroppedDown, profileEnabled = card.Profiles.Enabled,
                         profileRole = card.Profiles.AccessibilityObject.Role.ToString(), profileAccessibleName = card.Profiles.AccessibleName,
                         scrollsVertically = ((Panel)Field(card, "body")).VerticalScroll.Visible,

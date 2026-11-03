@@ -617,6 +617,7 @@ namespace GhostUI {
         }
         internal bool FitToWindow(Rectangle bounds) {
             if (bounds.Width < 300 || bounds.Height < 280) return false;
+            Point scroll = body.AutoScrollPosition;
             int width = Math.Min(S(IsCompact ? 176 : 400), bounds.Width - 64);
             int maxHeight = bounds.Height - 100;
             if (!IsCompact) {
@@ -627,6 +628,8 @@ namespace GhostUI {
             } else body.AutoScrollMinSize = Size.Empty;
             Size fitted = new Size(width, Math.Min(IsCompact ? S(38) : contentHeight, maxHeight));
             if (ClientSize != fitted) ClientSize = fitted;
+            if (!IsCompact && body.AutoScrollPosition != scroll)
+                body.AutoScrollPosition = new Point(-scroll.X, -scroll.Y);
             return true;
         }
         private int S(int value) { return (int)Math.Round(value * DeviceDpi / 96f); }
