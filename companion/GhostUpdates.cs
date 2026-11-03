@@ -516,7 +516,7 @@ namespace GhostUI {
         private readonly System.Collections.Generic.List<Font> ownedFonts = new System.Collections.Generic.List<Font>();
         private bool showAction = true, showConfirm, showCancel, showDestination;
         private int contentHeight, dividerY;
-        private string layoutKey;
+        private string layoutKey, fitKey;
         internal bool IsCompact { get; private set; }
         internal readonly Label TitleLabel, VersionLabel, SummaryLabel, StatusLabel;
         internal readonly Button Primary, Later, Cancel, Confirm, Check, Manual;
@@ -617,9 +617,12 @@ namespace GhostUI {
         }
         internal bool FitToWindow(Rectangle bounds) {
             if (bounds.Width < 300 || bounds.Height < 280) return false;
-            Point scroll = body.AutoScrollPosition;
             int width = Math.Min(S(IsCompact ? 176 : 400), bounds.Width - 64);
             int maxHeight = bounds.Height - 100;
+            string fit = width + ":" + maxHeight + ":" + DeviceDpi + ":" + IsCompact + ":" + showAction + ":" + showConfirm + ":" + showCancel + ":" + showDestination +
+                ":" + TitleLabel.Text + ":" + VersionLabel.Text + ":" + SummaryLabel.Text + ":" + StatusLabel.Text + ":" + Primary.Text;
+            if (fitKey == fit) return true;
+            Point scroll = body.AutoScrollPosition;
             if (!IsCompact) {
                 ArrangeContent(width, 0);
                 // Measure again with the width actually available beside a vertical scrollbar.
@@ -630,6 +633,7 @@ namespace GhostUI {
             if (ClientSize != fitted) ClientSize = fitted;
             if (!IsCompact && body.AutoScrollPosition != scroll)
                 body.AutoScrollPosition = new Point(-scroll.X, -scroll.Y);
+            fitKey = fit;
             return true;
         }
         private int S(int value) { return (int)Math.Round(value * DeviceDpi / 96f); }
