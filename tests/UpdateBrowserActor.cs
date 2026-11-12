@@ -180,6 +180,15 @@ namespace GhostUI {
                         foregroundPreserved = Native.GetForegroundWindow() == foreground });
                     body.AutoScrollPosition = Point.Empty;
                 }
+                if (!SystemInformation.HighContrast) {
+                    fixture.SyncGlass();
+                    var layer = (UpdateGlassLayer)Field(fixture, "glassLayer");
+                    var surface = (Bitmap)Field(layer, "surface");
+                    if (layer.Handle == IntPtr.Zero || Native.GetWindow(layer.Handle, 4) != fixture.Handle ||
+                        surface == null || surface.GetPixel(surface.Width / 2, 1).A == 0 ||
+                        surface.GetPixel(surface.Width / 2, surface.Height / 2).A != 0)
+                        throw new InvalidDataException("The owned rim layer did not preserve its transparent center.");
+                }
                 var launcherBounds = new Rectangle(fixture.Right - 176, fixture.Bottom - 38, 176, 38);
                 fixture.RevealFrom(launcherBounds);
                 if (SystemInformation.IsMenuAnimationEnabled && !SystemInformation.HighContrast &&

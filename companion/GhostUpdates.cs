@@ -416,7 +416,19 @@ namespace GhostUI {
     // A click-through owned surface supplies per-pixel glass highlights and
     // animates the shell while the native controls keep their final geometry.
     internal sealed class UpdateGlassLayer : NativeWindow, IDisposable {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BitmapInfo {
+            internal int HeaderSize, Width, Height;
+            internal ushort Planes, BitsPerPixel;
+            internal uint Compression, ImageSize;
+            internal int XPelsPerMeter, YPelsPerMeter;
+            internal uint ColorsUsed, ColorsImportant, FirstColor;
+        }
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr CreateDIBSection(IntPtr dc, ref BitmapInfo info, uint usage, out IntPtr pixels, IntPtr section, uint offset);
+
         private Bitmap surface;
+        private IntPtr sourceDc, dib, previousBitmap;
         private bool shown;
         private Rectangle lastBounds;
         private int lastRadius, lastDpi;
@@ -429,36 +441,49 @@ namespace GhostUI {
                 const int noActivate = 0x08000000, layered = 0x00080000, toolWindow = 0x80, transparent = 0x20;
                 CreateHandle(new CreateParams { Style = popup, ExStyle = noActivate | layered | toolWindow | transparent, Parent = owner });
             }
-            if (surface == null || surface.Size != bounds.Size) {
-                if (surface != null) surface.Dispose();
-                surface = new Bitmap(bounds.Width, bounds.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-            }
+            if (!EnsureSurface(bounds.Size)) return false;
             using (var graphics = Graphics.FromImage(surface)) {
                 graphics.Clear(Color.Transparent);
                 graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 PaintGlass(graphics, shape, radius, dpi, tintAlpha);
             }
 
-            IntPtr dc = Native.CreateCompatibleDC(IntPtr.Zero);
-            if (dc == IntPtr.Zero) return false;
-            IntPtr bitmap = IntPtr.Zero, previous = IntPtr.Zero;
-            try {
-                bitmap = surface.GetHbitmap(Color.FromArgb(0));
-                previous = Native.SelectObject(dc, bitmap);
-                if (previous == IntPtr.Zero || previous == new IntPtr(-1)) return false;
-                Point location = bounds.Location, origin = Point.Empty;
-                Size size = bounds.Size;
-                var blend = new Native.BLEND { ConstantAlpha = 255, Format = 1 };
-                if (!Native.UpdateLayeredWindow(Handle, IntPtr.Zero, ref location, ref size, dc, ref origin, 0, ref blend, 2)) return false;
-            } finally {
-                if (previous != IntPtr.Zero && previous != new IntPtr(-1)) Native.SelectObject(dc, previous);
-                if (bitmap != IntPtr.Zero) Native.DeleteObject(bitmap);
-                Native.DeleteDC(dc);
-            }
+            Point location = bounds.Location, origin = Point.Empty;
+            Size size = bounds.Size;
+            var blend = new Native.BLEND { ConstantAlpha = 255, Format = 1 };
+            if (!Native.UpdateLayeredWindow(Handle, IntPtr.Zero, ref location, ref size, sourceDc, ref origin, 0, ref blend, 2)) return false;
             if (!shown) { Native.ShowWindow(Handle, 4); shown = true; } // SW_SHOWNOACTIVATE
             lastBounds = tintAlpha == 0 ? bounds : Rectangle.Empty;
             lastRadius = radius; lastDpi = dpi;
             return true;
+        }
+
+        private bool EnsureSurface(Size size) {
+            if (surface != null && surface.Size == size) return true;
+            ReleaseSurface();
+            sourceDc = Native.CreateCompatibleDC(IntPtr.Zero);
+            if (sourceDc == IntPtr.Zero) return false;
+            // Paint directly into the same top-down buffer Windows composites.
+            // No per-frame bitmap copy or GDI handle allocation.
+            var info = new BitmapInfo { HeaderSize = 40, Width = size.Width, Height = -size.Height, Planes = 1, BitsPerPixel = 32 };
+            IntPtr pixels;
+            dib = CreateDIBSection(sourceDc, ref info, 0, out pixels, IntPtr.Zero, 0);
+            if (dib != IntPtr.Zero && pixels != IntPtr.Zero) {
+                previousBitmap = Native.SelectObject(sourceDc, dib);
+                if (previousBitmap != IntPtr.Zero && previousBitmap != new IntPtr(-1)) {
+                    surface = new Bitmap(size.Width, size.Height, size.Width * 4, System.Drawing.Imaging.PixelFormat.Format32bppPArgb, pixels);
+                    return true;
+                }
+            }
+            ReleaseSurface();
+            return false;
+        }
+        private void ReleaseSurface() {
+            if (surface != null) { surface.Dispose(); surface = null; }
+            if (previousBitmap != IntPtr.Zero && previousBitmap != new IntPtr(-1)) Native.SelectObject(sourceDc, previousBitmap);
+            if (dib != IntPtr.Zero) Native.DeleteObject(dib);
+            if (sourceDc != IntPtr.Zero) Native.DeleteDC(sourceDc);
+            sourceDc = dib = previousBitmap = IntPtr.Zero;
         }
 
         internal static void PaintGlass(Graphics graphics, Rectangle shape, int radius, int dpi, byte tintAlpha) {
@@ -492,7 +517,7 @@ namespace GhostUI {
         public void Dispose() {
             Hide();
             if (Handle != IntPtr.Zero) DestroyHandle();
-            if (surface != null) { surface.Dispose(); surface = null; }
+            ReleaseSurface();
         }
     }
     // Keep native button input and accessibility; customize only its appearance.
