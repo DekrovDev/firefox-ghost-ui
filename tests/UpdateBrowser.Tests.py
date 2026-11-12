@@ -297,7 +297,7 @@ def main():
                 raise AssertionError('Native hover could not reach the own launcher')
         hovered = wait(lambda s: s['launcherVisible'] and s['launcherHover'] == 1 and not s['launcherHoverAnimating'], 'Launcher hover did not settle and stop its timer')
         assert hovered['openRequests'] == mouse_opens, 'Hover opened update settings without a click'
-        assert .66 <= hovered['launcherOpacity'] <= .68 or hovered['launcherOpacity'] == 1, hovered
+        assert .58 <= hovered['launcherOpacity'] <= .60 or hovered['launcherOpacity'] == 1, hovered
         assert hovered['glassCorners'], 'Launcher region exposed a corner or clipped the center'
         if not hovered['highContrast']:
             for side in ('left', 'right'):
@@ -316,8 +316,13 @@ def main():
         clicked = wait(lambda s: s['openRequests'] > mouse_opens and s['visible'] and s['inside'] and s['onScreen'] and
                        not s['cardRevealing'], 'Actual launcher click did not open and settle contained settings')
         assert clicked['nativeOwner'] == clicked['owner'], 'Native update-card ownership detached from Firefox'
-        assert .83 <= clicked['launcherOpacity'] <= .85 or clicked['launcherOpacity'] == 1, clicked
+        assert .76 <= clicked['launcherOpacity'] <= .78 or clicked['launcherOpacity'] == 1, clicked
         assert clicked['glassCorners'], 'Panel region exposed a corner or clipped the center'
+        assert clicked['arrowCursors'], 'A panel action changed the arrow cursor'
+        if clicked['revealShouldAnimate']:
+            assert clicked['revealFrames'] >= 2, 'The actual click did not present the layered transition'
+            print(f"Glass reveal: {clicked['revealFrames']} layer updates, longest measured submission gap "
+                  f"{clicked['revealMaxFrameGapMs']:.1f} ms", flush=True)
         command('later')
         wait(lambda s: s['launcherVisible'], 'Manual entry missing before native hotkey')
         command('focus')

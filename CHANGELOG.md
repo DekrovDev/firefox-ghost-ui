@@ -4,8 +4,9 @@ English release notes for Firefox Ghost UI. Unreleased work is not an available 
 
 ## Unreleased
 
-- Give the update button a translucent glass finish and a brief reflected highlight.
-- Reveal the translucent update panel from the button and clip its rounded corners cleanly.
+- Give the update button a clear center, a denser glass rim, and a reflected edge highlight.
+- Morph the glass shell into the update panel without redrawing the live controls every frame.
+- Round the panel controls and keep a steady arrow cursor over actions and links.
 
 ## [1.3.3] - 2026-11-03
 

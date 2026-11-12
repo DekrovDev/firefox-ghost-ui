@@ -2,6 +2,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Drawing;
@@ -182,12 +183,19 @@ namespace GhostUI {
                 var launcherBounds = new Rectangle(fixture.Right - 176, fixture.Bottom - 38, 176, 38);
                 fixture.RevealFrom(launcherBounds);
                 if (SystemInformation.IsMenuAnimationEnabled && !SystemInformation.HighContrast &&
-                    (!fixture.IsRevealing || fixture.Region.IsVisible(fixture.ClientSize.Width / 2, 4) ||
-                    !fixture.Region.IsVisible(fixture.ClientSize.Width - 88, fixture.ClientSize.Height - 19)))
+                    (!fixture.IsRevealing || fixture.RevealShape != new Rectangle(fixture.Width - 176, fixture.Height - 38, 176, 38) ||
+                    !fixture.Region.IsVisible(fixture.ClientSize.Width / 2, 4) || fixture.Opacity != 0))
                     throw new InvalidDataException("The reveal did not begin inside the launcher footprint.");
                 fixture.Hide();
-                if (fixture.IsRevealing || !fixture.Region.IsVisible(fixture.ClientSize.Width / 2, 4))
-                    throw new InvalidDataException("Hiding the panel left a partial reveal region.");
+                if (fixture.IsRevealing || !fixture.RevealShape.IsEmpty || fixture.Opacity == 0)
+                    throw new InvalidDataException("Hiding the panel left a partial reveal.");
+                using (var glass = new Bitmap(176, 38, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
+                using (var graphics = Graphics.FromImage(glass)) {
+                    graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    UpdateGlassLayer.PaintGlass(graphics, new Rectangle(0, 0, 176, 38), 19, 96, 150);
+                    if (glass.GetPixel(88, 1).A <= glass.GetPixel(88, 19).A || glass.GetPixel(0, 0).A != 0)
+                        throw new InvalidDataException("Glass rim alpha is not denser than the center or a corner is opaque.");
+                }
             }
             return results.ToArray();
         }
@@ -276,6 +284,11 @@ namespace GhostUI {
                                             }
                                         }
                                         graphics.DrawImage(normal, area, 0, 0, normal.Width, normal.Height, GraphicsUnit.Pixel, alpha);
+                                        if (!SystemInformation.HighContrast) {
+                                            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                                            int radius = demo.IsCompact ? area.Height / 2 : (int)Math.Round(16 * demo.DeviceDpi / 96f);
+                                            UpdateGlassLayer.PaintGlass(graphics, area, radius, demo.DeviceDpi, 0);
+                                        }
                                         graphics.Restore(saved);
                                     }
                                     contexts.Save(Path.Combine(folder, name + "-contexts.png"), System.Drawing.Imaging.ImageFormat.Png);
@@ -460,6 +473,10 @@ namespace GhostUI {
                         glowTargetX = ((PointF)Field(launcher, "glowTarget")).X,
                         launcherHoverAnimating = launcher.HoverAnimating, launcherOpacity = card.Opacity,
                         cardRevealing = card.IsRevealing,
+                        revealFrames = card.RevealFrames, revealMaxFrameGapMs = card.RevealMaxFrameGapMs,
+                        revealShouldAnimate = SystemInformation.IsMenuAnimationEnabled && !SystemInformation.HighContrast,
+                        arrowCursors = new Control[] { launcher, card.Primary, card.Later, card.Profiles, card.Check, card.AutoCheck, card.Manual, card.Changes }
+                            .All(control => control.Cursor == Cursors.Arrow),
                         glassCorners = card.Region != null && !card.Region.IsVisible(0, 0) &&
                             !card.Region.IsVisible(card.ClientSize.Width - 1, 0) &&
                             !card.Region.IsVisible(0, card.ClientSize.Height - 1) &&
