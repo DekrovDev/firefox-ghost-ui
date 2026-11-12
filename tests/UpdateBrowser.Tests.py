@@ -297,7 +297,8 @@ def main():
                 raise AssertionError('Native hover could not reach the own launcher')
         hovered = wait(lambda s: s['launcherVisible'] and s['launcherHover'] == 1 and not s['launcherHoverAnimating'], 'Launcher hover did not settle and stop its timer')
         assert hovered['openRequests'] == mouse_opens, 'Hover opened update settings without a click'
-        assert .73 <= hovered['launcherOpacity'] <= .75 or hovered['launcherOpacity'] == 1, hovered
+        assert .66 <= hovered['launcherOpacity'] <= .68 or hovered['launcherOpacity'] == 1, hovered
+        assert hovered['glassCorners'], 'Launcher region exposed a corner or clipped the center'
         if not hovered['highContrast']:
             for side in ('left', 'right'):
                 assert command('hover-launcher', side=side)['hoverDelivered']
@@ -312,8 +313,11 @@ def main():
         command('leave-launcher')
         wait(lambda s: s['launcherVisible'] and s['launcherHover'] == 0 and not s['launcherHoverAnimating'], 'Launcher hover did not fade out and stop')
         native_click('click-launcher')
-        clicked = wait(lambda s: s['openRequests'] > mouse_opens and s['visible'] and s['inside'] and s['onScreen'], 'Actual launcher click did not open contained settings')
+        clicked = wait(lambda s: s['openRequests'] > mouse_opens and s['visible'] and s['inside'] and s['onScreen'] and
+                       not s['cardRevealing'], 'Actual launcher click did not open and settle contained settings')
         assert clicked['nativeOwner'] == clicked['owner'], 'Native update-card ownership detached from Firefox'
+        assert .83 <= clicked['launcherOpacity'] <= .85 or clicked['launcherOpacity'] == 1, clicked
+        assert clicked['glassCorners'], 'Panel region exposed a corner or clipped the center'
         command('later')
         wait(lambda s: s['launcherVisible'], 'Manual entry missing before native hotkey')
         command('focus')

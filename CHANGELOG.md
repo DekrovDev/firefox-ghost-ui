@@ -2,6 +2,11 @@
 
 English release notes for Firefox Ghost UI. Unreleased work is not an available update.
 
+## Unreleased
+
+- Give the update button a translucent glass finish and a brief reflected highlight.
+- Reveal the translucent update panel from the button and clip its rounded corners cleanly.
+
 ## [1.3.3] - 2026-11-03
 
 ### Summary

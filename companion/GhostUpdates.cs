@@ -398,7 +398,7 @@ namespace GhostUI {
         }
     }
     internal static class UpdateVisuals {
-        internal static readonly Color Surface = Color.FromArgb(36, 36, 36);
+        internal static readonly Color Surface = Color.FromArgb(22, 27, 37);
         internal static readonly Color Text = Color.FromArgb(243, 243, 243);
         internal static readonly Color Muted = Color.FromArgb(190, 190, 190);
         internal static readonly Color Edge = Color.FromArgb(82, 82, 82);
@@ -422,6 +422,7 @@ namespace GhostUI {
         private PointF glowPoint, glowTarget;
         private bool glowInitialized;
         private long hoverStamp;
+        private double reflection = 1;
         private readonly System.Windows.Forms.Timer hoverTimer = new System.Windows.Forms.Timer { Interval = 16 };
         internal double HoverProgress { get { return hoverProgress; } }
         internal bool HoverAnimating { get { return hoverTimer.Enabled; } }
@@ -437,12 +438,13 @@ namespace GhostUI {
                 double step = seconds / .18;
                 hoverStamp = now;
                 hoverProgress = hovered ? Math.Min(1, hoverProgress + step) : Math.Max(0, hoverProgress - step);
+                reflection = hovered ? Math.Min(1, reflection + seconds / .36) : 1;
                 double follow = 1 - Math.Exp(-seconds / .065);
                 glowPoint = new PointF((float)(glowPoint.X + (glowTarget.X - glowPoint.X) * follow),
                     (float)(glowPoint.Y + (glowTarget.Y - glowPoint.Y) * follow));
                 bool settled = Math.Abs(glowTarget.X - glowPoint.X) + Math.Abs(glowTarget.Y - glowPoint.Y) < .25;
                 if (settled) glowPoint = glowTarget;
-                if (hoverProgress == (hovered ? 1 : 0) && (!hovered || settled)) hoverTimer.Stop();
+                if (hoverProgress == (hovered ? 1 : 0) && reflection == 1 && (!hovered || settled)) hoverTimer.Stop();
                 Invalidate();
             };
         }
@@ -463,10 +465,18 @@ namespace GhostUI {
             if (!AnimatedLauncher || Disposing || IsDisposed) return;
             if (!Enabled || !Visible || SystemInformation.HighContrast || !SystemInformation.IsMenuAnimationEnabled) {
                 hoverTimer.Stop(); hoverProgress = Enabled && Visible && hovered ? 1 : 0;
+                reflection = 1;
                 glowPoint = glowTarget;
             } else if (!hoverTimer.Enabled) { hoverStamp = Stopwatch.GetTimestamp(); hoverTimer.Start(); }
         }
-        protected override void OnMouseEnter(EventArgs e) { hovered = true; if (AnimatedLauncher) TrackGlow(PointToClient(Cursor.Position)); AnimateHover(); Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseEnter(EventArgs e) {
+            hovered = true;
+            if (AnimatedLauncher) {
+                reflection = 0;
+                TrackGlow(PointToClient(Cursor.Position));
+            }
+            AnimateHover(); Invalidate(); base.OnMouseEnter(e);
+        }
         protected override void OnMouseMove(MouseEventArgs e) { if (AnimatedLauncher) { TrackGlow(e.Location); AnimateHover(); Invalidate(); } base.OnMouseMove(e); }
         protected override void OnMouseLeave(EventArgs e) { hovered = false; pressed = false; AnimateHover(); Invalidate(); base.OnMouseLeave(e); }
         protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
@@ -493,8 +503,31 @@ namespace GhostUI {
             using (var path = UpdateVisuals.Rounded(bounds, (int)Math.Round((AnimatedLauncher ? 18 : TextOnly ? 5 : 9) * DeviceDpi / 96f))) {
                 if (AnimatedLauncher && !highContrast) {
                     double ease = 1 - Math.Pow(1 - hoverProgress, 3);
-                    using (var brush = new SolidBrush(BackColor)) e.Graphics.FillPath(brush, path);
-                    using (var pen = new Pen(Color.FromArgb(Focused ? 160 : 64, 200, 200, 200))) e.Graphics.DrawPath(pen, path);
+                    using (var glass = new System.Drawing.Drawing2D.LinearGradientBrush(bounds,
+                        Color.FromArgb(49, 60, 78), pressed ? Color.FromArgb(35, 44, 59) : BackColor, 90f))
+                        e.Graphics.FillPath(glass, path);
+                    if (hovered && reflection < 1) {
+                        float band = bounds.Height * 1.25f;
+                        float travel = bounds.Width + band * 2;
+                        float x = (float)(travel * (1 - Math.Pow(1 - reflection, 2))) - band;
+                        var bandStart = new PointF(x - band / 2, bounds.Height);
+                        var bandEnd = new PointF(x + band / 2, 0);
+                        using (var specular = new System.Drawing.Drawing2D.LinearGradientBrush(bandStart, bandEnd, Color.Transparent, Color.Transparent)) {
+                            specular.InterpolationColors = new System.Drawing.Drawing2D.ColorBlend {
+                                Colors = new[] { Color.Transparent, Color.FromArgb((int)(84 * Math.Sin(Math.PI * reflection)), 215, 236, 255), Color.Transparent },
+                                Positions = new[] { 0f, .48f, 1f }
+                            };
+                            var clip = e.Graphics.Save();
+                            e.Graphics.SetClip(path, System.Drawing.Drawing2D.CombineMode.Intersect);
+                            using (var bandPath = new System.Drawing.Drawing2D.GraphicsPath()) {
+                                bandPath.AddPolygon(new[] { new PointF(x, 0), new PointF(x + band / 2, 0),
+                                    new PointF(x, bounds.Height), new PointF(x - band / 2, bounds.Height) });
+                                e.Graphics.FillPath(specular, bandPath);
+                            }
+                            e.Graphics.Restore(clip);
+                        }
+                    }
+                    using (var pen = new Pen(Color.FromArgb(Focused ? 180 : 105, 212, 228, 249))) e.Graphics.DrawPath(pen, path);
                     if (ease > 0) {
                         float radius = 48 * DeviceDpi / 96f;
                         using (var area = new System.Drawing.Drawing2D.GraphicsPath()) {
@@ -636,6 +669,12 @@ namespace GhostUI {
         private int contentHeight, dividerY;
         private string layoutKey, fitKey;
         private Size fittedViewport;
+        private const double LauncherOpacity = .67, PanelOpacity = .84;
+        private readonly System.Windows.Forms.Timer revealTimer = new System.Windows.Forms.Timer { Interval = 15 };
+        private Rectangle revealStart, visibleShape;
+        private int visibleRadius;
+        private long revealStarted;
+        internal bool IsRevealing { get { return revealTimer.Enabled; } }
         internal bool IsCompact { get; private set; }
         internal bool LauncherPressed { get { return IsCompact && launcher.Capture; } }
         internal readonly Label TitleLabel, VersionLabel, SummaryLabel, StatusLabel;
@@ -661,11 +700,12 @@ namespace GhostUI {
             AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(400, 472);
             BackColor = SystemInformation.HighContrast ? SystemColors.Window : UpdateVisuals.Surface;
             ForeColor = SystemInformation.HighContrast ? SystemColors.WindowText : UpdateVisuals.Text;
-            Font = OwnFont("Segoe UI", 10, FontStyle.Regular); Opacity = SystemInformation.HighContrast ? 1 : .98;
+            Font = OwnFont("Segoe UI", 10, FontStyle.Regular); Opacity = GlassOpacity;
             DoubleBuffered = true;
+            revealTimer.Tick += delegate { AdvanceReveal(); };
             Controls.Add(body);
             launcher = new UpdateButton { Text = "Ghost UI updates", Symbol = "\uE72C", Dock = DockStyle.Fill, TextOnly = true,
-                BackColor = Color.FromArgb(54, 54, 54), AnimatedLauncher = true, Cursor = Cursors.Default, Visible = false, AccessibleName = "Open Ghost UI update settings" };
+                BackColor = UpdateVisuals.Surface, AnimatedLauncher = true, Cursor = Cursors.Default, Visible = false, AccessibleName = "Open Ghost UI update settings" };
             launcher.MouseDown += delegate(object sender, MouseEventArgs e) {
                 // A real click authorizes activation; automatic display and
                 // programmatic opening must remain nonactivating.
@@ -716,10 +756,14 @@ namespace GhostUI {
             Primary.TabIndex = 3; Confirm.TabIndex = 3; Cancel.TabIndex = 4; Later.TabIndex = 4;
             Manual.TabIndex = 5; Changes.TabIndex = 6; AutoCheck.TabIndex = 7; Check.TabIndex = 8;
             body.Paint += delegate(object sender, PaintEventArgs e) {
+                Rectangle rim = Rectangle.Inflate(visibleShape, -1, -1);
+                if (rim.Width > 0 && rim.Height > 0) {
+                    e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    using (var outline = UpdateVisuals.Rounded(rim, Math.Max(1, visibleRadius - 1)))
+                    using (var rimPen = new Pen(SystemInformation.HighContrast ? SystemColors.WindowText : Color.FromArgb(112, 135, 165)))
+                        e.Graphics.DrawPath(rimPen, outline);
+                }
                 using (var pen = new Pen(SystemInformation.HighContrast ? SystemColors.WindowText : UpdateVisuals.Edge)) {
-                    if (body.ClientSize.Width > 1 && body.ClientSize.Height > 1)
-                        using (var outline = UpdateVisuals.Rounded(new Rectangle(0, 0, body.ClientSize.Width - 1, body.ClientSize.Height - 1), S(12)))
-                            e.Graphics.DrawPath(pen, outline);
                     int y = dividerY + body.AutoScrollPosition.Y;
                     e.Graphics.DrawLine(pen, S(22), y, body.ClientSize.Width - S(22), y);
                 }
@@ -728,13 +772,16 @@ namespace GhostUI {
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; if (DismissRequested != null) DismissRequested(); } };
         }
         internal void SetCompact(bool compact) {
-            double opacity = SystemInformation.HighContrast ? 1 : compact ? .74 : .98;
-            if (Opacity != opacity) Opacity = opacity;
-            if (IsCompact == compact) return;
+            if (IsCompact == compact) {
+                if (IsRevealing && !CanAnimateReveal) FinishReveal();
+                else if (!IsRevealing && Opacity != GlassOpacity) Opacity = GlassOpacity;
+                return;
+            }
             IsCompact = compact;
             if (compact) body.AutoScrollPosition = Point.Empty;
             body.Visible = !compact; launcher.Visible = compact;
             ClientSize = compact ? new Size(S(176), S(38)) : new Size(S(400), Math.Max(S(300), contentHeight));
+            FinishReveal();
         }
         internal bool FitToWindow(Rectangle bounds) {
             if (bounds.Width < 300 || bounds.Height < 280) return false;
@@ -910,8 +957,9 @@ namespace GhostUI {
         }
         protected override void Dispose(bool disposing) {
             if (disposing && shortcutRegistered) { Native.UnregisterHotKey(Handle, 3); shortcutRegistered = false; }
+            if (disposing) revealTimer.Stop();
             base.Dispose(disposing);
-            if (disposing) { foreach (var font in ownedFonts) font.Dispose(); ownedFonts.Clear(); }
+            if (disposing) { revealTimer.Dispose(); foreach (var font in ownedFonts) font.Dispose(); ownedFonts.Clear(); }
         }
         protected override bool ProcessCmdKey(ref Message message, Keys key) {
             if (key == Keys.Escape) {
@@ -938,10 +986,50 @@ namespace GhostUI {
         }
         protected override void OnResize(EventArgs e) {
             base.OnResize(e);
-            if (Width < 1 || Height < 1) return;
-            using (var path = UpdateVisuals.Rounded(new Rectangle(0, 0, Width, Height), IsCompact ? Height / 2 : S(12))) {
+            if (revealTimer != null && !Disposing && !IsDisposed) FinishReveal();
+        }
+        protected override void OnVisibleChanged(EventArgs e) {
+            if (!Visible && revealTimer != null && IsRevealing && !Disposing && !IsDisposed) FinishReveal();
+            base.OnVisibleChanged(e);
+        }
+        private double GlassOpacity { get { return SystemInformation.HighContrast ? 1 : IsCompact ? LauncherOpacity : PanelOpacity; } }
+        private static bool CanAnimateReveal { get { return !SystemInformation.HighContrast && SystemInformation.IsMenuAnimationEnabled; } }
+        internal void RevealFrom(Rectangle launcherBounds) {
+            if (IsCompact || !Visible || !CanAnimateReveal) return;
+            launcherBounds.Offset(-Left, -Top);
+            revealStart = Rectangle.Intersect(ClientRectangle, launcherBounds);
+            if (revealStart.Width < 2 || revealStart.Height < 2 || revealStart == ClientRectangle) return;
+            revealStarted = Stopwatch.GetTimestamp();
+            AdvanceReveal();
+            revealTimer.Start();
+        }
+        private void AdvanceReveal() {
+            double progress = (Stopwatch.GetTimestamp() - revealStarted) / (Stopwatch.Frequency * .26);
+            if (progress >= 1 || !CanAnimateReveal) { FinishReveal(); return; }
+            // Keep the controls at their final layout while the glass surface
+            // expands from the actual launcher footprint in screen space.
+            double expand = 1 - Math.Pow(1 - progress, 3);
+            double rise = 1 - Math.Pow(1 - progress, 2);
+            var shape = Rectangle.FromLTRB(
+                (int)Math.Round(revealStart.Left * (1 - expand)),
+                (int)Math.Round(revealStart.Top * (1 - rise)),
+                (int)Math.Round(revealStart.Right + (ClientSize.Width - revealStart.Right) * expand),
+                (int)Math.Round(revealStart.Bottom + (ClientSize.Height - revealStart.Bottom) * rise));
+            SetGlassShape(shape, (int)Math.Round(revealStart.Height / 2.0 * (1 - rise) + S(16) * rise));
+            Opacity = LauncherOpacity + (PanelOpacity - LauncherOpacity) * expand;
+        }
+        private void FinishReveal() {
+            revealTimer.Stop();
+            SetGlassShape(ClientRectangle, IsCompact ? ClientSize.Height / 2 : S(16));
+            if (Opacity != GlassOpacity) Opacity = GlassOpacity;
+        }
+        private void SetGlassShape(Rectangle bounds, int radius) {
+            if (bounds.Width < 1 || bounds.Height < 1 || bounds == visibleShape && radius == visibleRadius) return;
+            visibleShape = bounds; visibleRadius = radius;
+            using (var path = UpdateVisuals.Rounded(bounds, radius)) {
                 Region old = Region; Region = new Region(path); if (old != null) old.Dispose();
             }
+            body.Invalidate();
         }
     }
     internal sealed class UpdateController : IDisposable {
@@ -1058,9 +1146,11 @@ namespace GhostUI {
             cardOwner.Window = firefox;
             bool changed = owner != firefox;
             bool alreadyOpen = card.Visible && !card.IsCompact && !changed;
+            Rectangle launcherBounds = card.Visible && card.IsCompact && !changed ? card.Bounds : Rectangle.Empty;
             if (changed) { card.Hide(); owner = firefox; detectedOrigin = null; pageGeneration++; }
             if (!alreadyOpen) SelectContextProfile();
             manualOpen = true; card.SetCompact(false); Render(); Tick();
+            if (!launcherBounds.IsEmpty) card.RevealFrom(launcherBounds);
         }
         private void VerifyCache() {
             var release = state.Release; int stamp = ++generation; ready = false;

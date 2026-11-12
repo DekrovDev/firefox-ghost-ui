@@ -179,6 +179,15 @@ namespace GhostUI {
                         foregroundPreserved = Native.GetForegroundWindow() == foreground });
                     body.AutoScrollPosition = Point.Empty;
                 }
+                var launcherBounds = new Rectangle(fixture.Right - 176, fixture.Bottom - 38, 176, 38);
+                fixture.RevealFrom(launcherBounds);
+                if (SystemInformation.IsMenuAnimationEnabled && !SystemInformation.HighContrast &&
+                    (!fixture.IsRevealing || fixture.Region.IsVisible(fixture.ClientSize.Width / 2, 4) ||
+                    !fixture.Region.IsVisible(fixture.ClientSize.Width - 88, fixture.ClientSize.Height - 19)))
+                    throw new InvalidDataException("The reveal did not begin inside the launcher footprint.");
+                fixture.Hide();
+                if (fixture.IsRevealing || !fixture.Region.IsVisible(fixture.ClientSize.Width / 2, 4))
+                    throw new InvalidDataException("Hiding the panel left a partial reveal region.");
             }
             return results.ToArray();
         }
@@ -450,6 +459,12 @@ namespace GhostUI {
                         glowEdgeBalance = glowEdgeBalance, highContrast = SystemInformation.HighContrast,
                         glowTargetX = ((PointF)Field(launcher, "glowTarget")).X,
                         launcherHoverAnimating = launcher.HoverAnimating, launcherOpacity = card.Opacity,
+                        cardRevealing = card.IsRevealing,
+                        glassCorners = card.Region != null && !card.Region.IsVisible(0, 0) &&
+                            !card.Region.IsVisible(card.ClientSize.Width - 1, 0) &&
+                            !card.Region.IsVisible(0, card.ClientSize.Height - 1) &&
+                            !card.Region.IsVisible(card.ClientSize.Width - 1, card.ClientSize.Height - 1) &&
+                            card.Region.IsVisible(card.ClientSize.Width / 2, card.ClientSize.Height / 2),
                         title = card.TitleLabel.Text, summary = card.SummaryLabel.Text, primary = card.Primary.Text,
                         summaryVisible = card.SummaryLabel.Visible, summaryRequiredHeight = summaryHeight,
                         summaryAllocatedHeight = card.SummaryLabel.ClientSize.Height, summaryWidth = card.SummaryLabel.ClientSize.Width,
